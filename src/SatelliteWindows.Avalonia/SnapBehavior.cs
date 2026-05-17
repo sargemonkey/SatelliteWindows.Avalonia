@@ -8,6 +8,12 @@ public sealed class SnapBehavior
     /// <summary>Distance in pixels within which magnetic snapping activates (Phase 2).</summary>
     public int MagneticThresholdPx { get; set; } = 20;
 
+    /// <summary>Whether dragging a satellite away from its snap position auto-detaches it.</summary>
+    public bool AutoDetachOnDrag { get; set; } = true;
+
+    /// <summary>Pixel distance a satellite must be dragged before it auto-detaches.</summary>
+    public int DetachThresholdPx { get; set; } = 30;
+
     /// <summary>Whether to automatically snap satellites when dragged near an edge (Phase 2).</summary>
     public bool AutoSnapOnDrag { get; set; }
 

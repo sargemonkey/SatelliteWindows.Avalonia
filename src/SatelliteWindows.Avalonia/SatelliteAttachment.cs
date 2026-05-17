@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 
 namespace SatelliteWindows.Avalonia;
@@ -18,6 +19,9 @@ public sealed class SatelliteAttachment
 
     /// <summary>Offset along the edge in logical units (DIPs). 0 = aligned to edge start.</summary>
     public double OffsetAlongEdge { get; set; }
+
+    /// <summary>Last position set programmatically by the manager (screen pixels).</summary>
+    internal PixelPoint ExpectedPosition { get; set; }
 
     internal SatelliteAttachment(SatelliteWindow satellite, Window parent, SnapEdge edge, double offsetAlongEdge = 0)
     {

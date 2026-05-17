@@ -117,15 +117,15 @@ public partial class MainWindow : Window
     private void UpdateStatus()
     {
         var parts = new List<string>();
-        if (_leftSatellite != null) parts.Add("Left");
-        if (_rightSatellite != null) parts.Add("Right");
+        if (_leftSatellite is { IsAttached: true }) parts.Add("Left");
+        if (_rightSatellite is { IsAttached: true }) parts.Add("Right");
 
         StatusText.Text = parts.Count > 0
             ? $"Attached: {string.Join(", ", parts)}"
             : "No satellites attached";
 
-        DetachLeftBtn.IsEnabled = _leftSatellite != null;
-        DetachRightBtn.IsEnabled = _rightSatellite != null;
+        DetachLeftBtn.IsEnabled = _leftSatellite is { IsAttached: true };
+        DetachRightBtn.IsEnabled = _rightSatellite is { IsAttached: true };
         AttachLeftBtn.IsEnabled = _leftSatellite == null;
         AttachRightBtn.IsEnabled = _rightSatellite == null;
     }
