@@ -12,7 +12,7 @@ public sealed class SatelliteAttachment
     public SatelliteWindow Satellite { get; }
 
     /// <summary>The parent window this satellite is attached to.</summary>
-    public Window Parent { get; }
+    public Window Parent { get; internal set; }
 
     /// <summary>Which edge of the parent the satellite is attached to.</summary>
     public SnapEdge Edge { get; }

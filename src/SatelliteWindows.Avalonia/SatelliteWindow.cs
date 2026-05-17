@@ -11,6 +11,9 @@ public class SatelliteWindow : Window
     internal SatelliteAttachment? Attachment { get; set; }
     internal SatelliteManager? Manager { get; set; }
 
+    /// <summary>Identifier used for persist/restore. Set before saving state.</summary>
+    public string? SatelliteId { get; set; }
+
     public SatelliteWindow()
     {
         ShowInTaskbar = false;

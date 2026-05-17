@@ -41,6 +41,26 @@ public partial class MainWindow : Window
         _manager.Attach(_rightSatellite, SnapEdge.Right);
     }
 
+    private void OnAttachBottomToRight(object? sender, RoutedEventArgs e)
+    {
+        if (_manager == null || _rightSatellite == null || !_rightSatellite.IsAttached) return;
+
+        var chained = CreateSatellitePanel("Chained (Bottom→R)", Colors.DarkGoldenrod);
+        chained.Height = 200;
+        chained.Closed += (_, _) => SyncAndUpdateStatus();
+        _manager.Attach(chained, _rightSatellite, SnapEdge.Bottom);
+    }
+
+    private void OnStackRight(object? sender, RoutedEventArgs e)
+    {
+        if (_manager == null) return;
+        int count = _manager.GetChildren(_manager.MainWindow).Count(a => a.Edge == SnapEdge.Right) + 1;
+        var stacked = CreateSatellitePanel($"Right #{count}", Colors.DarkCyan);
+        stacked.Height = 200;
+        stacked.Closed += (_, _) => SyncAndUpdateStatus();
+        _manager.Attach(stacked, SnapEdge.Right);
+    }
+
     private void OnDetachLeft(object? sender, RoutedEventArgs e)
     {
         if (_leftSatellite == null) return;
@@ -96,6 +116,7 @@ public partial class MainWindow : Window
         DetachRightBtn.IsEnabled = rightAttached;
         AttachLeftBtn.IsEnabled = _leftSatellite == null;
         AttachRightBtn.IsEnabled = _rightSatellite == null;
+        AttachBottomBtn.IsEnabled = rightAttached;
     }
 
     private static SatelliteWindow CreateSatellitePanel(string title, Color accentColor)
