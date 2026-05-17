@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SatelliteWindows.Avalonia</RootNamespace>
+    <Description>Multi-window snapping library for Avalonia — magnetic satellite windows that attach to edges of a main window.</Description>
+    <PackageId>SatelliteWindows.Avalonia</PackageId>
+    <Version>0.1.0</Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="11.2.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SatelliteWindows.Avalonia.Tests" />
+  </ItemGroup>
+</Project>

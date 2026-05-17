@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/samples/">
+    <Project Path="samples/SatelliteDemo/SatelliteDemo.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/SatelliteWindows.Avalonia/SatelliteWindows.Avalonia.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SatelliteWindows.Avalonia.Tests/SatelliteWindows.Avalonia.Tests.csproj" />
+  </Folder>
+</Solution>
