@@ -7,7 +7,8 @@ namespace SatelliteWindows.Avalonia;
 /// <summary>
 /// Manages satellite windows attached to a main window.
 /// Handles positioning, follow-on-move, follow-on-resize,
-/// minimize/restore synchronization, and close propagation.
+/// minimize/restore synchronization, close propagation,
+/// drag-away detach, and magnetic re-snap.
 /// </summary>
 public sealed class SatelliteManager : IDisposable
 {
@@ -16,10 +17,11 @@ public sealed class SatelliteManager : IDisposable
     private readonly List<SatelliteAttachment> _attachments = new();
     private readonly HashSet<SatelliteWindow> _hiddenByMinimize = new();
     private readonly Dictionary<SatelliteWindow, EventHandler<PixelPointEventArgs>> _satPositionHandlers = new();
+    private readonly Dictionary<SatelliteWindow, (EventHandler<PixelPointEventArgs> pos, EventHandler closed)> _reSnapHandlers = new();
     private bool _isDisposed;
     private bool _isClosingAll;
     private bool _isRepositioning;
-    private int _cachedBorderPx = -1; // -1 = not yet detected
+    private int _cachedBorderPx = -1;
 
     public SatelliteManager(Window mainWindow, SnapBehavior? behavior = null)
     {
@@ -34,11 +36,15 @@ public sealed class SatelliteManager : IDisposable
     /// <summary>Active snap behavior configuration.</summary>
     public SnapBehavior Behavior => _behavior;
 
+    /// <summary>Fired when satellites are attached or detached (including drag-away and re-snap).</summary>
+    public event Action? AttachmentChanged;
+
     // ── Public API ──────────────────────────────────────────────────
 
     /// <summary>
     /// Attach a satellite to the main window's edge.
     /// The satellite is positioned and shown automatically.
+    /// Also handles re-snap of already-visible detached satellites.
     /// </summary>
     public void Attach(SatelliteWindow satellite, SnapEdge edge, double offsetAlongEdge = 0)
     {
@@ -48,33 +54,37 @@ public sealed class SatelliteManager : IDisposable
         if (satellite.Manager != null)
             throw new InvalidOperationException("Satellite is already attached to a manager.");
 
+        // Clean up re-snap monitoring if this satellite was being tracked
+        StopReSnapMonitoring(satellite);
+
         var attachment = new SatelliteAttachment(satellite, _mainWindow, edge, offsetAlongEdge);
+        attachment.AttachedAt = DateTime.UtcNow;
         satellite.Attachment = attachment;
         satellite.Manager = this;
         _attachments.Add(attachment);
 
-        // Register Opened handler BEFORE Show to avoid missing the event
-        void OnOpened(object? s, EventArgs e)
-        {
-            satellite.Opened -= OnOpened;
-            if (satellite.Manager != this) return;
-
-            // Reposition with accurate frame size now available
-            PositionSatellite(attachment);
-
-            // Start monitoring for user drags (after final positioning)
-            if (_behavior.AutoDetachOnDrag)
-            {
-                EventHandler<PixelPointEventArgs> posHandler = (_, _) => OnSatelliteUserMoved(satellite);
-                satellite.PositionChanged += posHandler;
-                _satPositionHandlers[satellite] = posHandler;
-            }
-        }
-        satellite.Opened += OnOpened;
-
-        // Position before showing to reduce flicker
         PositionSatellite(attachment);
-        satellite.Show(_mainWindow);
+
+        if (!satellite.IsVisible)
+        {
+            // First attach — register Opened handler BEFORE Show
+            void OnOpened(object? s, EventArgs e)
+            {
+                satellite.Opened -= OnOpened;
+                if (satellite.Manager != this) return;
+                PositionSatellite(attachment);
+                SubscribeDragDetection(satellite);
+            }
+            satellite.Opened += OnOpened;
+            satellite.Show(_mainWindow);
+        }
+        else
+        {
+            // Re-snap — window already visible, start drag detection immediately
+            SubscribeDragDetection(satellite);
+        }
+
+        AttachmentChanged?.Invoke();
     }
 
     /// <summary>
@@ -100,6 +110,8 @@ public sealed class SatelliteManager : IDisposable
             try { satellite.Close(); }
             catch (InvalidOperationException) { /* already closed */ }
         }
+
+        AttachmentChanged?.Invoke();
     }
 
     /// <summary>Close and detach all satellites.</summary>
@@ -108,6 +120,10 @@ public sealed class SatelliteManager : IDisposable
         _isClosingAll = true;
         try
         {
+            // Stop all re-snap monitoring
+            foreach (var sat in _reSnapHandlers.Keys.ToArray())
+                StopReSnapMonitoring(sat);
+
             foreach (var attachment in _attachments.ToArray())
             {
                 var sat = attachment.Satellite;
@@ -125,6 +141,8 @@ public sealed class SatelliteManager : IDisposable
         {
             _isClosingAll = false;
         }
+
+        AttachmentChanged?.Invoke();
     }
 
     // ── Main-window event handlers ──────────────────────────────────
@@ -193,7 +211,16 @@ public sealed class SatelliteManager : IDisposable
             DetachAll();
     }
 
-    // ── Satellite drag-away detection ───────────────────────────────
+    // ── Drag-away detection ─────────────────────────────────────────
+
+    private void SubscribeDragDetection(SatelliteWindow satellite)
+    {
+        if (!_behavior.AutoDetachOnDrag) return;
+        UnsubscribeFromSatellite(satellite); // Prevent duplicate subscriptions
+        EventHandler<PixelPointEventArgs> handler = (_, _) => OnSatelliteUserMoved(satellite);
+        satellite.PositionChanged += handler;
+        _satPositionHandlers[satellite] = handler;
+    }
 
     private void OnSatelliteUserMoved(SatelliteWindow satellite)
     {
@@ -202,18 +229,27 @@ public sealed class SatelliteManager : IDisposable
         var attachment = _attachments.Find(a => a.Satellite == satellite);
         if (attachment == null) return;
 
+        // During snap cooldown, resist drag by forcing satellite back to snap position
+        if ((DateTime.UtcNow - attachment.AttachedAt).TotalMilliseconds < 500)
+        {
+            PositionSatellite(attachment);
+            return;
+        }
+
         var actual = satellite.Position;
         var expected = attachment.ExpectedPosition;
         int dx = Math.Abs(actual.X - expected.X);
         int dy = Math.Abs(actual.Y - expected.Y);
 
-        // Small differences are normal (OS rounding, platform adjustments)
         if (dx <= 5 && dy <= 5) return;
 
-        // Beyond detach threshold — user dragged it away
         if (dx > _behavior.DetachThresholdPx || dy > _behavior.DetachThresholdPx)
         {
-            Detach(satellite); // Detach but keep the window open
+            Detach(satellite);
+
+            // Start monitoring for magnetic re-snap
+            if (_behavior.AutoSnapOnDrag)
+                StartReSnapMonitoring(satellite);
         }
     }
 
@@ -224,6 +260,78 @@ public sealed class SatelliteManager : IDisposable
             satellite.PositionChanged -= handler;
             _satPositionHandlers.Remove(satellite);
         }
+    }
+
+    // ── Magnetic re-snap monitoring ─────────────────────────────────
+
+    private void StartReSnapMonitoring(SatelliteWindow satellite)
+    {
+        if (_reSnapHandlers.ContainsKey(satellite)) return;
+
+        EventHandler<PixelPointEventArgs> posHandler = (_, _) => OnDetachedSatelliteMoved(satellite);
+        EventHandler closedHandler = (_, _) => StopReSnapMonitoring(satellite);
+
+        satellite.PositionChanged += posHandler;
+        satellite.Closed += closedHandler;
+        _reSnapHandlers[satellite] = (posHandler, closedHandler);
+    }
+
+    private void StopReSnapMonitoring(SatelliteWindow satellite)
+    {
+        if (_reSnapHandlers.TryGetValue(satellite, out var handlers))
+        {
+            satellite.PositionChanged -= handlers.pos;
+            satellite.Closed -= handlers.closed;
+            _reSnapHandlers.Remove(satellite);
+        }
+    }
+
+    private void OnDetachedSatelliteMoved(SatelliteWindow satellite)
+    {
+        if (_isClosingAll || _isDisposed) return;
+        if (!satellite.IsVisible)
+        {
+            StopReSnapMonitoring(satellite);
+            return;
+        }
+
+        var edge = DetectNearestSnapEdge(satellite);
+        if (edge.HasValue)
+        {
+            // Re-snap!
+            Attach(satellite, edge.Value);
+        }
+    }
+
+    /// <summary>
+    /// Check if a detached satellite is close enough to a main window edge to snap.
+    /// Returns the edge if within MagneticThresholdPx, null otherwise.
+    /// </summary>
+    private SnapEdge? DetectNearestSnapEdge(SatelliteWindow satellite)
+    {
+        var satPos = satellite.Position;
+        var satSize = GetWindowPixelSize(satellite);
+        var parentPos = _mainWindow.Position;
+        var parentSize = GetWindowPixelSize(_mainWindow);
+        int threshold = _behavior.MagneticThresholdPx;
+        int overlap = GetFrameOverlapPx();
+
+        // Must have some vertical proximity to the main window
+        bool verticalProximity = satPos.Y < parentPos.Y + parentSize.Height + threshold
+                              && satPos.Y + satSize.Height > parentPos.Y - threshold;
+        if (!verticalProximity) return null;
+
+        // Right edge: satellite's left edge near main's right edge (after overlap)
+        int rightSnapX = parentPos.X + parentSize.Width - overlap;
+        if (Math.Abs(satPos.X - rightSnapX) <= threshold)
+            return SnapEdge.Right;
+
+        // Left edge: satellite's right edge near main's left edge (after overlap)
+        int leftSnapX = parentPos.X - satSize.Width + overlap;
+        if (Math.Abs(satPos.X - leftSnapX) <= threshold)
+            return SnapEdge.Left;
+
+        return null;
     }
 
     // ── Positioning engine ──────────────────────────────────────────
@@ -248,17 +356,15 @@ public sealed class SatelliteManager : IDisposable
             var targetPos = PositionCalculator.Calculate(
                 parentPos, parentSize, satSize, attachment.Edge, offsetPx);
 
-            // Compensate for invisible frame borders (DWM shadow/resize borders on Windows)
-            int borderPx = GetBorderPx();
-            if (borderPx > 0 && (attachment.Edge is SnapEdge.Left or SnapEdge.Right))
+            // Compensate for invisible frame borders, leaving a 2px visible gap
+            if (attachment.Edge is SnapEdge.Left or SnapEdge.Right)
             {
-                int overlap = 2 * borderPx;
+                int overlap = GetFrameOverlapPx();
                 targetPos = attachment.Edge == SnapEdge.Right
                     ? new PixelPoint(targetPos.X - overlap, targetPos.Y)
                     : new PixelPoint(targetPos.X + overlap, targetPos.Y);
             }
 
-            // Clamp to visible area across all screens
             var screens = _mainWindow.Screens;
             if (screens != null)
             {
@@ -278,10 +384,15 @@ public sealed class SatelliteManager : IDisposable
     // ── Frame border detection ──────────────────────────────────────
 
     /// <summary>
-    /// Detect the non-client border thickness in pixels.
-    /// On Windows, this includes the invisible DWM resize/shadow border.
-    /// Returns 0 on platforms without invisible borders or if detection fails.
+    /// Compute how many pixels to overlap window frames.
+    /// Subtracts 2px to leave a thin visible gap between snapped windows.
     /// </summary>
+    private int GetFrameOverlapPx()
+    {
+        int borderPx = GetBorderPx();
+        return Math.Max(0, 2 * borderPx - 2);
+    }
+
     private int GetBorderPx()
     {
         if (_cachedBorderPx >= 0) return _cachedBorderPx;
@@ -290,10 +401,6 @@ public sealed class SatelliteManager : IDisposable
         {
             var clientOrigin = _mainWindow.PointToScreen(new Point(0, 0));
             int leftMargin = clientOrigin.X - _mainWindow.Position.X;
-
-            // Only apply compensation when the margin looks like a Windows DWM border
-            // (typically 5-10px at 100% DPI). Avoid compensating on platforms where
-            // the margin is 0 (macOS/Linux) or very large (custom chrome with padding).
             _cachedBorderPx = (leftMargin >= 3 && leftMargin <= 20) ? leftMargin : 0;
         }
         catch
@@ -304,14 +411,9 @@ public sealed class SatelliteManager : IDisposable
         return _cachedBorderPx;
     }
 
-    /// <summary>
-    /// Get window size in screen pixels. Uses FrameSize (includes decorations)
-    /// when available, falls back to ClientSize.
-    /// </summary>
     internal static PixelSize GetWindowPixelSize(Window window)
     {
         var scaling = window.RenderScaling;
-
         var frameSize = window.FrameSize;
         if (frameSize.HasValue)
         {
@@ -319,7 +421,6 @@ public sealed class SatelliteManager : IDisposable
                 (int)Math.Round(frameSize.Value.Width * scaling),
                 (int)Math.Round(frameSize.Value.Height * scaling));
         }
-
         return DpiHelper.LogicalToPixel(window.ClientSize, scaling);
     }
 
@@ -335,6 +436,8 @@ public sealed class SatelliteManager : IDisposable
         if (_isDisposed) return;
         _isDisposed = true;
         UnsubscribeFromMainWindow();
+        foreach (var sat in _reSnapHandlers.Keys.ToArray())
+            StopReSnapMonitoring(sat);
         DetachAll();
     }
 }

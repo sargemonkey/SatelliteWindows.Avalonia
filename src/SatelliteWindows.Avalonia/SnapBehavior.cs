@@ -14,8 +14,8 @@ public sealed class SnapBehavior
     /// <summary>Pixel distance a satellite must be dragged before it auto-detaches.</summary>
     public int DetachThresholdPx { get; set; } = 30;
 
-    /// <summary>Whether to automatically snap satellites when dragged near an edge (Phase 2).</summary>
-    public bool AutoSnapOnDrag { get; set; }
+    /// <summary>Whether to automatically snap satellites when dragged near an edge.</summary>
+    public bool AutoSnapOnDrag { get; set; } = true;
 
     /// <summary>Whether satellites reposition when the main window is resized.</summary>
     public bool FollowOnResize { get; set; } = true;

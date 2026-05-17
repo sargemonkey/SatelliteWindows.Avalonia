@@ -23,6 +23,9 @@ public sealed class SatelliteAttachment
     /// <summary>Last position set programmatically by the manager (screen pixels).</summary>
     internal PixelPoint ExpectedPosition { get; set; }
 
+    /// <summary>When this attachment was created (for snap cooldown).</summary>
+    internal DateTime AttachedAt { get; set; }
+
     internal SatelliteAttachment(SatelliteWindow satellite, Window parent, SnapEdge edge, double offsetAlongEdge = 0)
     {
         Satellite = satellite;

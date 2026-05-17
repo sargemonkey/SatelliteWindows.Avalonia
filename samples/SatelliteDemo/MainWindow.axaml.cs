@@ -20,6 +20,7 @@ public partial class MainWindow : Window
     private void OnMainOpened(object? sender, EventArgs e)
     {
         _manager = new SatelliteManager(this);
+        _manager.AttachmentChanged += SyncAndUpdateStatus;
     }
 
     private void OnAttachLeft(object? sender, RoutedEventArgs e)
@@ -27,14 +28,8 @@ public partial class MainWindow : Window
         if (_manager == null || _leftSatellite != null) return;
 
         _leftSatellite = CreateSatellitePanel("Left Panel", Colors.DarkSlateBlue);
+        _leftSatellite.Closed += (_, _) => { _leftSatellite = null; SyncAndUpdateStatus(); };
         _manager.Attach(_leftSatellite, SnapEdge.Left);
-        _leftSatellite.Closed += (_, _) =>
-        {
-            _leftSatellite = null;
-            UpdateStatus();
-        };
-
-        UpdateStatus();
     }
 
     private void OnAttachRight(object? sender, RoutedEventArgs e)
@@ -42,14 +37,8 @@ public partial class MainWindow : Window
         if (_manager == null || _rightSatellite != null) return;
 
         _rightSatellite = CreateSatellitePanel("Right Panel", Colors.DarkOliveGreen);
+        _rightSatellite.Closed += (_, _) => { _rightSatellite = null; SyncAndUpdateStatus(); };
         _manager.Attach(_rightSatellite, SnapEdge.Right);
-        _rightSatellite.Closed += (_, _) =>
-        {
-            _rightSatellite = null;
-            UpdateStatus();
-        };
-
-        UpdateStatus();
     }
 
     private void OnDetachLeft(object? sender, RoutedEventArgs e)
@@ -57,7 +46,6 @@ public partial class MainWindow : Window
         if (_leftSatellite == null) return;
         _manager?.Detach(_leftSatellite, closeSatellite: true);
         _leftSatellite = null;
-        UpdateStatus();
     }
 
     private void OnDetachRight(object? sender, RoutedEventArgs e)
@@ -65,7 +53,6 @@ public partial class MainWindow : Window
         if (_rightSatellite == null) return;
         _manager?.Detach(_rightSatellite, closeSatellite: true);
         _rightSatellite = null;
-        UpdateStatus();
     }
 
     private void OnDetachAll(object? sender, RoutedEventArgs e)
@@ -73,7 +60,42 @@ public partial class MainWindow : Window
         _manager?.DetachAll();
         _leftSatellite = null;
         _rightSatellite = null;
-        UpdateStatus();
+    }
+
+    /// <summary>
+    /// Re-discover attached satellites from the manager (handles re-snap)
+    /// and update the UI.
+    /// </summary>
+    private void SyncAndUpdateStatus()
+    {
+        if (_manager == null) return;
+
+        // Sync references: a drag-away re-snap may have reattached a satellite
+        var leftAtt = _manager.Attachments.FirstOrDefault(a => a.Edge == SnapEdge.Left);
+        var rightAtt = _manager.Attachments.FirstOrDefault(a => a.Edge == SnapEdge.Right);
+
+        if (leftAtt != null) _leftSatellite = leftAtt.Satellite;
+        if (rightAtt != null) _rightSatellite = rightAtt.Satellite;
+
+        bool leftAttached = leftAtt != null;
+        bool rightAttached = rightAtt != null;
+        bool hasFloating = (_leftSatellite != null && !leftAttached)
+                        || (_rightSatellite != null && !rightAttached);
+
+        var parts = new List<string>();
+        if (leftAttached) parts.Add("Left");
+        if (rightAttached) parts.Add("Right");
+
+        StatusText.Text = parts.Count > 0
+            ? $"Attached: {string.Join(", ", parts)}"
+            : hasFloating
+                ? "Drag near edge to re-snap"
+                : "No satellites attached";
+
+        DetachLeftBtn.IsEnabled = leftAttached;
+        DetachRightBtn.IsEnabled = rightAttached;
+        AttachLeftBtn.IsEnabled = _leftSatellite == null;
+        AttachRightBtn.IsEnabled = _rightSatellite == null;
     }
 
     private static SatelliteWindow CreateSatellitePanel(string title, Color accentColor)
@@ -112,22 +134,6 @@ public partial class MainWindow : Window
         };
 
         return satellite;
-    }
-
-    private void UpdateStatus()
-    {
-        var parts = new List<string>();
-        if (_leftSatellite is { IsAttached: true }) parts.Add("Left");
-        if (_rightSatellite is { IsAttached: true }) parts.Add("Right");
-
-        StatusText.Text = parts.Count > 0
-            ? $"Attached: {string.Join(", ", parts)}"
-            : "No satellites attached";
-
-        DetachLeftBtn.IsEnabled = _leftSatellite is { IsAttached: true };
-        DetachRightBtn.IsEnabled = _rightSatellite is { IsAttached: true };
-        AttachLeftBtn.IsEnabled = _leftSatellite == null;
-        AttachRightBtn.IsEnabled = _rightSatellite == null;
     }
 
     protected override void OnClosed(EventArgs e)
