@@ -25,7 +25,7 @@ public class SatelliteWindow : Window
     protected override void OnClosed(EventArgs e)
     {
         base.OnClosed(e);
-        // Notify the manager so it can clean up the attachment
-        Manager?.Detach(this);
+        // Reparent children to grandparent so closing one satellite doesn't kill the chain
+        Manager?.Detach(this, DetachMode.ReparentChildren);
     }
 }

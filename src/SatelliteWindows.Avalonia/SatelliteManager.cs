@@ -189,7 +189,7 @@ public sealed class SatelliteManager : IDisposable
             void OnOpened(object? s, EventArgs e)
             {
                 satellite.Opened -= OnOpened;
-                if (satellite.Manager != this) return;
+                if (satellite.Manager != this || satellite.Attachment != attachment) return;
                 PositionSatellite(attachment);
                 SubscribeDragDetection(satellite);
             }
@@ -232,7 +232,7 @@ public sealed class SatelliteManager : IDisposable
         RemoveFromTree(attachment);
         _hiddenByMinimize.Remove(satellite);
         satellite.Attachment = null;
-        satellite.Manager = null;
+        satellite.Manager = null; // Clear before Close to prevent reentrancy from OnClosed
 
         if (closeSatellite)
         {
@@ -497,10 +497,18 @@ public sealed class SatelliteManager : IDisposable
         var snap = DetectNearestSnap(satellite);
         if (snap == null) return;
 
-        if (snap.Value.parent == _mainWindow)
-            Attach(satellite, snap.Value.edge);
-        else if (snap.Value.parent is SatelliteWindow parentSat)
-            Attach(satellite, parentSat, snap.Value.edge);
+        // Compute offset from satellite's current screen position relative to the snap parent
+        var parent = snap.Value.parent;
+        var parentPos = parent.Position;
+        var scaling = parent.RenderScaling;
+        double offset = (snap.Value.edge is SnapEdge.Left or SnapEdge.Right)
+            ? (satellite.Position.Y - parentPos.Y) / scaling
+            : (satellite.Position.X - parentPos.X) / scaling;
+
+        if (parent == _mainWindow)
+            Attach(satellite, snap.Value.edge, offset);
+        else if (parent is SatelliteWindow parentSat)
+            Attach(satellite, parentSat, snap.Value.edge, offset);
     }
 
     private (Window parent, SnapEdge edge)? DetectNearestSnap(SatelliteWindow satellite)
@@ -516,7 +524,8 @@ public sealed class SatelliteManager : IDisposable
         var candidates = new List<Window> { _mainWindow };
         foreach (var att in _allAttachments)
         {
-            if (att.Satellite != satellite && !IsDescendant(att.Satellite, satellite))
+            if (att.Satellite != satellite && att.Satellite.IsVisible
+                && !IsDescendant(att.Satellite, satellite))
                 candidates.Add(att.Satellite);
         }
 

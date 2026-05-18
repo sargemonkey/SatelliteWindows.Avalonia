@@ -90,9 +90,9 @@ public partial class MainWindow : Window
     {
         if (_manager == null) return;
 
-        // Sync references: a drag-away re-snap may have reattached a satellite
-        var leftAtt = _manager.Attachments.FirstOrDefault(a => a.Edge == SnapEdge.Left);
-        var rightAtt = _manager.Attachments.FirstOrDefault(a => a.Edge == SnapEdge.Right);
+        // Sync references: filter by direct children of main window only
+        var leftAtt = _manager.Attachments.FirstOrDefault(a => a.Edge == SnapEdge.Left && a.Parent == _manager.MainWindow);
+        var rightAtt = _manager.Attachments.FirstOrDefault(a => a.Edge == SnapEdge.Right && a.Parent == _manager.MainWindow);
 
         if (leftAtt != null) _leftSatellite = leftAtt.Satellite;
         if (rightAtt != null) _rightSatellite = rightAtt.Satellite;
