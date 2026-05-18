@@ -409,24 +409,41 @@ public sealed class SatelliteManager : IDisposable
             PositionSatellite(attachment);
             return;
         }
-        attachment.IsReSnap = false; // Cooldown expired, clear flag
+        attachment.IsReSnap = false;
 
         var actual = satellite.Position;
         var expected = attachment.ExpectedPosition;
         int dx = actual.X - expected.X;
         int dy = actual.Y - expected.Y;
-        int distSq = dx * dx + dy * dy;
 
-        // Small jitter — ignore
-        if (distSq <= 25) return; // ~5px
+        // Decompose into perpendicular (away from edge) and parallel (along edge)
+        int perpendicular, parallel;
+        if (attachment.Edge is SnapEdge.Left or SnapEdge.Right)
+        {
+            perpendicular = Math.Abs(dx);
+            parallel = dy;
+        }
+        else
+        {
+            perpendicular = Math.Abs(dy);
+            parallel = dx;
+        }
 
-        // Euclidean distance exceeds threshold — detach
-        int threshSq = _behavior.DetachThresholdPx * _behavior.DetachThresholdPx;
-        if (distSq > threshSq)
+        // Perpendicular exceeds threshold → detach
+        if (perpendicular > _behavior.DetachThresholdPx)
         {
             DetachCore(satellite, DetachMode.DetachChain, closeSatellite: false);
             if (_behavior.AutoSnapOnDrag)
                 StartReSnapMonitoring(satellite);
+            return;
+        }
+
+        // Parallel movement → slide along edge (update offset, stay snapped)
+        if (Math.Abs(parallel) > 3)
+        {
+            var scaling = attachment.Parent.RenderScaling;
+            attachment.OffsetAlongEdge += parallel / scaling;
+            PositionSatellite(attachment);
         }
     }
 
