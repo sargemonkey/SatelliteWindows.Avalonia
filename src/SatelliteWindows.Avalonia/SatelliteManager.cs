@@ -458,9 +458,12 @@ public sealed class SatelliteManager : IDisposable
 
     // ── Magnetic re-snap monitoring ─────────────────────────────────
 
+    private readonly Dictionary<SatelliteWindow, DateTime> _detachedAt = new();
+
     private void StartReSnapMonitoring(SatelliteWindow satellite)
     {
         if (_reSnapHandlers.ContainsKey(satellite)) return;
+        _detachedAt[satellite] = DateTime.UtcNow;
         EventHandler<PixelPointEventArgs> posHandler = (_, _) => OnDetachedSatelliteMoved(satellite);
         EventHandler closedHandler = (_, _) => StopReSnapMonitoring(satellite);
         satellite.PositionChanged += posHandler;
@@ -470,6 +473,7 @@ public sealed class SatelliteManager : IDisposable
 
     private void StopReSnapMonitoring(SatelliteWindow satellite)
     {
+        _detachedAt.Remove(satellite);
         if (_reSnapHandlers.TryGetValue(satellite, out var h))
         {
             satellite.PositionChanged -= h.pos;
@@ -482,6 +486,11 @@ public sealed class SatelliteManager : IDisposable
     {
         if (_isClosingAll || _isDisposed) return;
         if (!satellite.IsVisible) { StopReSnapMonitoring(satellite); return; }
+
+        // Don't re-snap immediately after detach — prevents stutter loop
+        if (_detachedAt.TryGetValue(satellite, out var dt)
+            && (DateTime.UtcNow - dt).TotalMilliseconds < 500)
+            return;
 
         var snap = DetectNearestSnap(satellite);
         if (snap == null) return;
