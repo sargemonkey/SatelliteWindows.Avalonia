@@ -31,4 +31,12 @@ public sealed class SnapBehavior
 
     /// <summary>Minimum pixels that must remain visible on any screen.</summary>
     public int MinVisiblePixels { get; set; } = 50;
+
+    /// <summary>
+    /// Minimum overlap ratio (0.0–1.0) along the shared axis for magnetic snap.
+    /// E.g., 0.3 means at least 30% of the smaller window must vertically overlap
+    /// the target for a Left/Right snap to trigger. Prevents snapping when windows
+    /// are barely aligned.
+    /// </summary>
+    public double SnapOverlapRatio { get; set; } = 0.3;
 }

@@ -26,6 +26,9 @@ public sealed class SatelliteAttachment
     /// <summary>When this attachment was created (for snap cooldown).</summary>
     internal DateTime AttachedAt { get; set; }
 
+    /// <summary>Whether this was a magnetic re-snap (cooldown applies) vs initial attach.</summary>
+    internal bool IsReSnap { get; set; }
+
     internal SatelliteAttachment(SatelliteWindow satellite, Window parent, SnapEdge edge, double offsetAlongEdge = 0)
     {
         Satellite = satellite;

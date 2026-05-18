@@ -185,6 +185,7 @@ public sealed class SatelliteManager : IDisposable
 
         if (!satellite.IsVisible)
         {
+            // Initial attach — no cooldown needed
             void OnOpened(object? s, EventArgs e)
             {
                 satellite.Opened -= OnOpened;
@@ -197,6 +198,8 @@ public sealed class SatelliteManager : IDisposable
         }
         else
         {
+            // Re-snap — mark for cooldown resistance
+            attachment.IsReSnap = true;
             SubscribeDragDetection(satellite);
         }
 
@@ -400,20 +403,26 @@ public sealed class SatelliteManager : IDisposable
         var attachment = _allAttachments.Find(a => a.Satellite == satellite);
         if (attachment == null) return;
 
-        if ((DateTime.UtcNow - attachment.AttachedAt).TotalMilliseconds < 500)
+        // Cooldown: only for re-snaps (magnetic drag-back), pin to snap position briefly
+        if (attachment.IsReSnap && (DateTime.UtcNow - attachment.AttachedAt).TotalMilliseconds < 300)
         {
             PositionSatellite(attachment);
             return;
         }
+        attachment.IsReSnap = false; // Cooldown expired, clear flag
 
         var actual = satellite.Position;
         var expected = attachment.ExpectedPosition;
-        int dx = Math.Abs(actual.X - expected.X);
-        int dy = Math.Abs(actual.Y - expected.Y);
+        int dx = actual.X - expected.X;
+        int dy = actual.Y - expected.Y;
+        int distSq = dx * dx + dy * dy;
 
-        if (dx <= 5 && dy <= 5) return;
+        // Small jitter — ignore
+        if (distSq <= 25) return; // ~5px
 
-        if (dx > _behavior.DetachThresholdPx || dy > _behavior.DetachThresholdPx)
+        // Euclidean distance exceeds threshold — detach
+        int threshSq = _behavior.DetachThresholdPx * _behavior.DetachThresholdPx;
+        if (distSq > threshSq)
         {
             DetachCore(satellite, DetachMode.DetachChain, closeSatellite: false);
             if (_behavior.AutoSnapOnDrag)
@@ -488,17 +497,20 @@ public sealed class SatelliteManager : IDisposable
             var pPos = cand.Position;
             var pSize = GetWindowPixelSize(cand);
 
-            bool vertProx = satPos.Y < pPos.Y + pSize.Height + threshold
-                         && satPos.Y + satSize.Height > pPos.Y - threshold;
-            bool horizProx = satPos.X < pPos.X + pSize.Width + threshold
-                          && satPos.X + satSize.Width > pPos.X - threshold;
+            // For Left/Right edges: require sufficient vertical overlap
+            double vertOverlapRatio = CalculateOverlapRatio(
+                satPos.Y, satSize.Height, pPos.Y, pSize.Height);
 
-            if (vertProx)
+            // For Top/Bottom edges: require sufficient horizontal overlap
+            double horizOverlapRatio = CalculateOverlapRatio(
+                satPos.X, satSize.Width, pPos.X, pSize.Width);
+
+            if (vertOverlapRatio >= _behavior.SnapOverlapRatio)
             {
                 CheckEdge(pPos.X + pSize.Width - overlap, satPos.X, cand, SnapEdge.Right, ref bestDist, ref best, threshold);
                 CheckEdge(pPos.X - satSize.Width + overlap, satPos.X, cand, SnapEdge.Left, ref bestDist, ref best, threshold);
             }
-            if (horizProx)
+            if (horizOverlapRatio >= _behavior.SnapOverlapRatio)
             {
                 CheckEdge(pPos.Y + pSize.Height - overlap, satPos.Y, cand, SnapEdge.Bottom, ref bestDist, ref best, threshold);
                 CheckEdge(pPos.Y - satSize.Height + overlap, satPos.Y, cand, SnapEdge.Top, ref bestDist, ref best, threshold);
@@ -517,6 +529,19 @@ public sealed class SatelliteManager : IDisposable
             bestDist = dist;
             best = (parent, edge);
         }
+    }
+
+    /// <summary>
+    /// Calculate what fraction of the smaller window overlaps the larger along one axis.
+    /// Returns 0.0 (no overlap) to 1.0 (fully contained).
+    /// </summary>
+    private static double CalculateOverlapRatio(int aPos, int aSize, int bPos, int bSize)
+    {
+        int overlapStart = Math.Max(aPos, bPos);
+        int overlapEnd = Math.Min(aPos + aSize, bPos + bSize);
+        int overlap = Math.Max(0, overlapEnd - overlapStart);
+        int smaller = Math.Min(aSize, bSize);
+        return smaller > 0 ? (double)overlap / smaller : 0;
     }
 
     // ── Positioning engine ──────────────────────────────────────────
