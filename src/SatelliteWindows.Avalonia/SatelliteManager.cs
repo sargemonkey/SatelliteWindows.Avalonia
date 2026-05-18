@@ -617,6 +617,13 @@ public sealed class SatelliteManager : IDisposable
                 ? new PixelPoint(targetPos.X - ol, targetPos.Y)
                 : new PixelPoint(targetPos.X + ol, targetPos.Y);
         }
+        else if (attachment.Edge is SnapEdge.Top or SnapEdge.Bottom)
+        {
+            int ol = GetFrameOverlapPx();
+            targetPos = attachment.Edge == SnapEdge.Bottom
+                ? new PixelPoint(targetPos.X, targetPos.Y - ol)
+                : new PixelPoint(targetPos.X, targetPos.Y + ol);
+        }
 
         var screens = _mainWindow.Screens;
         if (screens != null)
