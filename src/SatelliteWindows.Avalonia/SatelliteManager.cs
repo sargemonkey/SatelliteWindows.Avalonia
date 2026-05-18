@@ -438,12 +438,14 @@ public sealed class SatelliteManager : IDisposable
             return;
         }
 
-        // Parallel movement → slide along edge (update offset, stay snapped)
+        // Parallel movement → slide along edge (update offset, don't fight the drag)
         if (Math.Abs(parallel) > 3)
         {
             var scaling = attachment.Parent.RenderScaling;
             attachment.OffsetAlongEdge += parallel / scaling;
-            PositionSatellite(attachment);
+            // Accept user's position — avoids fighting the OS drag.
+            // Perpendicular snap corrects on next main window move.
+            attachment.ExpectedPosition = satellite.Position;
         }
     }
 
