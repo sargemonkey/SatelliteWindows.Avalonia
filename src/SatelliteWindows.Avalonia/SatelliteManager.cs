@@ -432,7 +432,7 @@ public sealed class SatelliteManager : IDisposable
         // Perpendicular exceeds threshold → detach
         if (perpendicular > _behavior.DetachThresholdPx)
         {
-            DetachCore(satellite, DetachMode.DetachChain, closeSatellite: false);
+            DetachCore(satellite, DetachMode.ReparentChildren, closeSatellite: false);
             if (_behavior.AutoSnapOnDrag)
                 StartReSnapMonitoring(satellite);
             return;
