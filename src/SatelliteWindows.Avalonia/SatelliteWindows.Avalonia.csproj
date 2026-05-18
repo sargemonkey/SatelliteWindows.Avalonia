@@ -1,17 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>SatelliteWindows.Avalonia</RootNamespace>
-    <Description>Multi-window snapping library for Avalonia — magnetic satellite windows that attach to edges of a main window.</Description>
+
+    <!-- NuGet package metadata -->
     <PackageId>SatelliteWindows.Avalonia</PackageId>
-    <Version>0.1.0</Version>
+    <Version>1.0.0</Version>
+    <Authors>SatelliteWindows Contributors</Authors>
+    <Description>Multi-window snapping library for Avalonia UI — magnetic satellite windows that attach to edges of a main window, with chaining, stacking, dual-mode docking, and persist/restore.</Description>
+    <PackageTags>avalonia;window;snap;dock;satellite;panel;multi-window</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryType>git</RepositoryType>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.*" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="SatelliteWindows.Avalonia.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>

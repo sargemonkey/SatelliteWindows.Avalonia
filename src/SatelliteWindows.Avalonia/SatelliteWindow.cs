@@ -5,6 +5,7 @@ namespace SatelliteWindows.Avalonia;
 /// <summary>
 /// A window subclass with satellite snap awareness.
 /// Set your content, size, and any window properties before attaching via <see cref="SatelliteManager"/>.
+/// For minimal chrome, set SystemDecorations and ExtendClientAreaToDecorationsHint before attaching.
 /// </summary>
 public class SatelliteWindow : Window
 {
@@ -22,10 +23,23 @@ public class SatelliteWindow : Window
     /// <summary>Whether this satellite is currently attached to a manager.</summary>
     public bool IsAttached => Manager != null;
 
+    /// <summary>
+    /// Brief opacity flash to give visual feedback on snap.
+    /// </summary>
+    internal async void FlashSnap()
+    {
+        try
+        {
+            Opacity = 0.75;
+            await Task.Delay(150);
+            if (IsVisible) Opacity = 1.0;
+        }
+        catch { /* window may have closed during animation */ }
+    }
+
     protected override void OnClosed(EventArgs e)
     {
         base.OnClosed(e);
-        // Reparent children to grandparent so closing one satellite doesn't kill the chain
         Manager?.Detach(this, DetachMode.ReparentChildren);
     }
 }

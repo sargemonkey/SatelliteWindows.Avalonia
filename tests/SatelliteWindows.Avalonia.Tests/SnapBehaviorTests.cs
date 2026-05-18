@@ -9,7 +9,7 @@ public class SnapBehaviorTests
     {
         var behavior = new SnapBehavior();
 
-        Assert.Equal(20, behavior.MagneticThresholdPx);
+        Assert.Equal(40, behavior.MagneticThresholdPx);
         Assert.True(behavior.AutoDetachOnDrag);
         Assert.Equal(30, behavior.DetachThresholdPx);
         Assert.True(behavior.AutoSnapOnDrag);

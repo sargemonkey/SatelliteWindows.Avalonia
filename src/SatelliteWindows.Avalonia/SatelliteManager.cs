@@ -290,9 +290,10 @@ public sealed class SatelliteManager : IDisposable
         }
         else
         {
-            // Re-snap — mark for cooldown resistance
+            // Re-snap — mark for cooldown resistance + visual feedback
             attachment.IsReSnap = true;
             SubscribeDragDetection(satellite);
+            satellite.FlashSnap();
         }
 
         AttachmentChanged?.Invoke();
