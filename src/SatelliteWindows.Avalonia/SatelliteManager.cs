@@ -526,7 +526,10 @@ public sealed class SatelliteManager : IDisposable
         {
             DetachCore(satellite, DetachMode.ReparentChildren, closeSatellite: false);
             if (_behavior.AutoSnapOnDrag)
+            {
+                StopReSnapMonitoring(satellite); // Clean up any stale state
                 StartReSnapMonitoring(satellite);
+            }
             return;
         }
 
@@ -554,7 +557,7 @@ public sealed class SatelliteManager : IDisposable
 
     private void StartReSnapMonitoring(SatelliteWindow satellite)
     {
-        if (_reSnapHandlers.ContainsKey(satellite)) return;
+        StopReSnapMonitoring(satellite); // Ensure clean state
         _detachedAt[satellite] = DateTime.UtcNow;
         EventHandler<PixelPointEventArgs> posHandler = (_, _) => OnDetachedSatelliteMoved(satellite);
         EventHandler closedHandler = (_, _) => StopReSnapMonitoring(satellite);
@@ -581,7 +584,7 @@ public sealed class SatelliteManager : IDisposable
 
         // Don't re-snap immediately after detach — prevents stutter loop
         if (_detachedAt.TryGetValue(satellite, out var dt)
-            && (DateTime.UtcNow - dt).TotalMilliseconds < 500)
+            && (DateTime.UtcNow - dt).TotalMilliseconds < 300)
             return;
 
         var snap = DetectNearestSnap(satellite);
