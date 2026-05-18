@@ -729,7 +729,10 @@ public sealed class SatelliteManager : IDisposable
         }
         else if (attachment.Edge is SnapEdge.Top or SnapEdge.Bottom)
         {
-            int ol = GetFrameOverlapPx();
+            // Vertical borders are asymmetric (title bar on top, small border on bottom).
+            // Use a smaller overlap — just enough to close the invisible bottom border gap.
+            int borderPx = GetBorderPx();
+            int ol = Math.Max(0, borderPx - 1); // Single-side compensation
             targetPos = attachment.Edge == SnapEdge.Bottom
                 ? new PixelPoint(targetPos.X, targetPos.Y - ol)
                 : new PixelPoint(targetPos.X, targetPos.Y + ol);

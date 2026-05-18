@@ -5,8 +5,8 @@ namespace SatelliteWindows.Avalonia;
 /// </summary>
 public sealed class SnapBehavior
 {
-    /// <summary>Distance in pixels within which magnetic snapping activates (Phase 2).</summary>
-    public int MagneticThresholdPx { get; set; } = 20;
+    /// <summary>Distance in pixels within which magnetic snapping activates.</summary>
+    public int MagneticThresholdPx { get; set; } = 40;
 
     /// <summary>Whether dragging a satellite away from its snap position auto-detaches it.</summary>
     public bool AutoDetachOnDrag { get; set; } = true;
