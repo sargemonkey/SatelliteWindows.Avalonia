@@ -18,6 +18,8 @@ public sealed class SatelliteManager : IDisposable
     private readonly HashSet<SatelliteWindow> _hiddenByMinimize = new();
     private readonly Dictionary<SatelliteWindow, EventHandler<PixelPointEventArgs>> _satPositionHandlers = new();
     private readonly Dictionary<SatelliteWindow, (EventHandler<PixelPointEventArgs> pos, EventHandler closed)> _reSnapHandlers = new();
+    private readonly Dictionary<SatelliteWindow, SnapEdge> _dockedSatellites = new();
+    private readonly Dictionary<SatelliteWindow, DateTime> _detachedAt = new();
     private bool _isDisposed;
     private bool _isClosingAll;
     private bool _isRepositioning;
@@ -86,6 +88,15 @@ public sealed class SatelliteManager : IDisposable
             _childMap.Clear();
             _hiddenByMinimize.Clear();
             _satPositionHandlers.Clear();
+
+            // Close docked satellites too
+            foreach (var (sat, _) in _dockedSatellites)
+            {
+                sat.Manager = null;
+                try { sat.Close(); }
+                catch (InvalidOperationException) { }
+            }
+            _dockedSatellites.Clear();
         }
         finally
         {
@@ -102,19 +113,100 @@ public sealed class SatelliteManager : IDisposable
         return Array.Empty<SatelliteAttachment>();
     }
 
+    /// <summary>Whether a satellite is currently docked inside the main window.</summary>
+    public bool IsDocked(SatelliteWindow satellite) => _dockedSatellites.ContainsKey(satellite);
+
+    // ── Dock / Undock ───────────────────────────────────────────────
+
+    /// <summary>
+    /// Dock a satellite inside the main window. The main window must implement
+    /// <see cref="ISatelliteDockHost"/>. Only leaf satellites (no children) can be docked.
+    /// </summary>
+    public void Dock(SatelliteWindow satellite, SnapEdge? edge = null)
+    {
+        ArgumentNullException.ThrowIfNull(satellite);
+        ThrowIfDisposed();
+
+        if (_dockedSatellites.ContainsKey(satellite))
+            throw new InvalidOperationException("Satellite is already docked.");
+
+        if (_mainWindow is not ISatelliteDockHost host)
+            throw new InvalidOperationException("Main window does not implement ISatelliteDockHost.");
+
+        if (GetChildren(satellite).Count > 0)
+            throw new InvalidOperationException("Cannot dock a satellite with children. Detach children first.");
+
+        // Determine dock edge
+        var attachment = _allAttachments.Find(a => a.Satellite == satellite);
+        var dockEdge = edge ?? attachment?.Edge ?? SnapEdge.Right;
+
+        // Ask host to embed the content
+        if (!host.TryDockSatellite(satellite, dockEdge))
+            return;
+
+        // Remove from external tree if attached
+        if (attachment != null)
+        {
+            UnsubscribeFromSatellite(satellite);
+            RemoveFromTree(attachment);
+        }
+        StopReSnapMonitoring(satellite);
+
+        satellite.Attachment = null;
+        satellite.Manager = this; // Still managed
+        satellite.Hide();
+        _dockedSatellites[satellite] = dockEdge;
+
+        AttachmentChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Undock a satellite from the main window back to an external satellite.
+    /// </summary>
+    public void Undock(SatelliteWindow satellite, SnapEdge? edge = null)
+    {
+        ArgumentNullException.ThrowIfNull(satellite);
+        ThrowIfDisposed();
+
+        if (!_dockedSatellites.TryGetValue(satellite, out var dockedEdge))
+            throw new InvalidOperationException("Satellite is not docked.");
+
+        if (_mainWindow is not ISatelliteDockHost host)
+            throw new InvalidOperationException("Main window does not implement ISatelliteDockHost.");
+
+        if (!host.TryUndockSatellite(satellite))
+            return;
+
+        _dockedSatellites.Remove(satellite);
+        satellite.Manager = null; // Clear so Attach doesn't reject
+
+        // Re-attach externally
+        Attach(satellite, edge ?? dockedEdge);
+    }
+
     // ── Persist / Restore ───────────────────────────────────────────
 
-    /// <summary>Serialize the attachment tree. All satellites must have SatelliteId set.</summary>
+    /// <summary>Serialize all satellites (external + docked). All must have SatelliteId set.</summary>
     public AttachmentState[] SaveState()
     {
-        return _allAttachments.Select(a => new AttachmentState(
-            a.Satellite.SatelliteId ?? throw new InvalidOperationException("Satellite must have SatelliteId to save state."),
-            a.Parent == _mainWindow ? null : ((SatelliteWindow)a.Parent).SatelliteId,
-            a.Edge,
-            a.OffsetAlongEdge,
-            a.Satellite.Width,
-            a.Satellite.Height
-        )).ToArray();
+        var states = new List<AttachmentState>();
+
+        foreach (var a in _allAttachments)
+        {
+            states.Add(new AttachmentState(
+                a.Satellite.SatelliteId ?? throw new InvalidOperationException("Satellite must have SatelliteId to save state."),
+                a.Parent == _mainWindow ? null : ((SatelliteWindow)a.Parent).SatelliteId,
+                a.Edge, a.OffsetAlongEdge, a.Satellite.Width, a.Satellite.Height));
+        }
+
+        foreach (var (sat, edge) in _dockedSatellites)
+        {
+            states.Add(new AttachmentState(
+                sat.SatelliteId ?? throw new InvalidOperationException("Satellite must have SatelliteId to save state."),
+                null, edge, 0, sat.Width, sat.Height, IsDocked: true));
+        }
+
+        return states.ToArray();
     }
 
     /// <summary>Restore attachment tree from saved state. Creates windows via factory.</summary>
@@ -459,8 +551,6 @@ public sealed class SatelliteManager : IDisposable
     }
 
     // ── Magnetic re-snap monitoring ─────────────────────────────────
-
-    private readonly Dictionary<SatelliteWindow, DateTime> _detachedAt = new();
 
     private void StartReSnapMonitoring(SatelliteWindow satellite)
     {

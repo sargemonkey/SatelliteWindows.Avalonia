@@ -4,38 +4,54 @@
         Title="Satellite Demo — Main Window"
         Width="600" Height="400">
 
-    <StackPanel Margin="20" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Center">
-        <TextBlock Text="Satellite Window Demo"
-                   FontSize="24" FontWeight="Bold"
-                   HorizontalAlignment="Center" />
+    <DockPanel>
+        <!-- Dock targets (hidden until used) -->
+        <Border x:Name="LeftDockArea" DockPanel.Dock="Left" IsVisible="False"
+                Width="250" Background="#30483D8B" />
+        <Border x:Name="RightDockArea" DockPanel.Dock="Right" IsVisible="False"
+                Width="250" Background="#30556B2F" />
 
-        <TextBlock x:Name="StatusText"
-                   Text="No satellites attached"
-                   HorizontalAlignment="Center"
-                   Margin="0,10,0,20" />
+        <!-- Main content -->
+        <StackPanel Margin="20" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Center">
+            <TextBlock Text="Satellite Window Demo"
+                       FontSize="24" FontWeight="Bold"
+                       HorizontalAlignment="Center" />
 
-        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-            <Button x:Name="AttachLeftBtn" Content="Attach Left"
-                    Click="OnAttachLeft" Width="120" />
-            <Button x:Name="AttachRightBtn" Content="Attach Right"
-                    Click="OnAttachRight" Width="120" />
+            <TextBlock x:Name="StatusText"
+                       Text="No satellites attached"
+                       HorizontalAlignment="Center"
+                       Margin="0,10,0,20" />
+
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                <Button x:Name="AttachLeftBtn" Content="Attach Left"
+                        Click="OnAttachLeft" Width="120" />
+                <Button x:Name="AttachRightBtn" Content="Attach Right"
+                        Click="OnAttachRight" Width="120" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                <Button x:Name="AttachBottomBtn" Content="Chain Bottom→R"
+                        Click="OnAttachBottomToRight" Width="120" IsEnabled="False" />
+                <Button x:Name="StackRightBtn" Content="Stack Right"
+                        Click="OnStackRight" Width="120" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                <Button x:Name="DockLeftBtn" Content="Dock Left"
+                        Click="OnDockLeft" Width="120" IsEnabled="False" />
+                <Button x:Name="DockRightBtn" Content="Dock Right"
+                        Click="OnDockRight" Width="120" IsEnabled="False" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
+                <Button x:Name="DetachLeftBtn" Content="Detach Left"
+                        Click="OnDetachLeft" Width="120" IsEnabled="False" />
+                <Button x:Name="DetachRightBtn" Content="Detach Right"
+                        Click="OnDetachRight" Width="120" IsEnabled="False" />
+            </StackPanel>
+
+            <Button Content="Detach All" Click="OnDetachAll"
+                    HorizontalAlignment="Center" Width="250" Margin="0,10,0,0" />
         </StackPanel>
-
-        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-            <Button x:Name="AttachBottomBtn" Content="Chain Bottom→R"
-                    Click="OnAttachBottomToRight" Width="120" IsEnabled="False" />
-            <Button x:Name="StackRightBtn" Content="Stack Right"
-                    Click="OnStackRight" Width="120" />
-        </StackPanel>
-
-        <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-            <Button x:Name="DetachLeftBtn" Content="Detach Left"
-                    Click="OnDetachLeft" Width="120" IsEnabled="False" />
-            <Button x:Name="DetachRightBtn" Content="Detach Right"
-                    Click="OnDetachRight" Width="120" IsEnabled="False" />
-        </StackPanel>
-
-        <Button Content="Detach All" Click="OnDetachAll"
-                HorizontalAlignment="Center" Width="250" Margin="0,10,0,0" />
-    </StackPanel>
+    </DockPanel>
 </Window>

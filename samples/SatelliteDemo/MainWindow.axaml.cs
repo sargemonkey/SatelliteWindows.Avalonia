@@ -5,11 +5,12 @@ using SatelliteWindows.Avalonia;
 
 namespace SatelliteDemo;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Window, ISatelliteDockHost
 {
     private SatelliteManager? _manager;
     private SatelliteWindow? _leftSatellite;
     private SatelliteWindow? _rightSatellite;
+    private readonly Dictionary<SatelliteWindow, (object? content, Border dockArea)> _dockedContent = new();
 
     public MainWindow()
     {
@@ -23,10 +24,38 @@ public partial class MainWindow : Window
         _manager.AttachmentChanged += SyncAndUpdateStatus;
     }
 
+    // ── ISatelliteDockHost ──────────────────────────────────────────
+
+    public bool TryDockSatellite(SatelliteWindow satellite, SnapEdge edge)
+    {
+        var dockArea = edge == SnapEdge.Left ? LeftDockArea : RightDockArea;
+        if (dockArea.IsVisible) return false;
+
+        var content = satellite.Content;
+        satellite.Content = null;
+        dockArea.Child = content as Control;
+        dockArea.IsVisible = true;
+        _dockedContent[satellite] = (content, dockArea);
+        return true;
+    }
+
+    public bool TryUndockSatellite(SatelliteWindow satellite)
+    {
+        if (!_dockedContent.TryGetValue(satellite, out var info)) return false;
+
+        var content = info.dockArea.Child;
+        info.dockArea.Child = null;
+        info.dockArea.IsVisible = false;
+        satellite.Content = content;
+        _dockedContent.Remove(satellite);
+        return true;
+    }
+
+    // ── Button handlers ─────────────────────────────────────────────
+
     private void OnAttachLeft(object? sender, RoutedEventArgs e)
     {
         if (_manager == null || _leftSatellite != null) return;
-
         _leftSatellite = CreateSatellitePanel("Left Panel", Colors.DarkSlateBlue);
         _leftSatellite.Closed += (_, _) => { _leftSatellite = null; SyncAndUpdateStatus(); };
         _manager.Attach(_leftSatellite, SnapEdge.Left);
@@ -35,7 +64,6 @@ public partial class MainWindow : Window
     private void OnAttachRight(object? sender, RoutedEventArgs e)
     {
         if (_manager == null || _rightSatellite != null) return;
-
         _rightSatellite = CreateSatellitePanel("Right Panel", Colors.DarkOliveGreen);
         _rightSatellite.Closed += (_, _) => { _rightSatellite = null; SyncAndUpdateStatus(); };
         _manager.Attach(_rightSatellite, SnapEdge.Right);
@@ -44,8 +72,7 @@ public partial class MainWindow : Window
     private void OnAttachBottomToRight(object? sender, RoutedEventArgs e)
     {
         if (_manager == null || _rightSatellite == null || !_rightSatellite.IsAttached) return;
-
-        var chained = CreateSatellitePanel("Chained (Bottom→R)", Colors.DarkGoldenrod);
+        var chained = CreateSatellitePanel("Chained (Bottom->R)", Colors.DarkGoldenrod);
         chained.Height = 200;
         chained.Closed += (_, _) => SyncAndUpdateStatus();
         _manager.Attach(chained, _rightSatellite, SnapEdge.Bottom);
@@ -61,17 +88,43 @@ public partial class MainWindow : Window
         _manager.Attach(stacked, SnapEdge.Right);
     }
 
+    private void OnDockLeft(object? sender, RoutedEventArgs e)
+    {
+        if (_leftSatellite != null && _manager != null)
+        {
+            if (_manager.IsDocked(_leftSatellite))
+                _manager.Undock(_leftSatellite);
+            else
+                _manager.Dock(_leftSatellite, SnapEdge.Left);
+        }
+    }
+
+    private void OnDockRight(object? sender, RoutedEventArgs e)
+    {
+        if (_rightSatellite != null && _manager != null)
+        {
+            if (_manager.IsDocked(_rightSatellite))
+                _manager.Undock(_rightSatellite);
+            else
+                _manager.Dock(_rightSatellite, SnapEdge.Right);
+        }
+    }
+
     private void OnDetachLeft(object? sender, RoutedEventArgs e)
     {
-        if (_leftSatellite == null) return;
-        _manager?.Detach(_leftSatellite, closeSatellite: true);
+        if (_leftSatellite == null || _manager == null) return;
+        if (_manager.IsDocked(_leftSatellite))
+            _manager.Undock(_leftSatellite);
+        _manager.Detach(_leftSatellite, closeSatellite: true);
         _leftSatellite = null;
     }
 
     private void OnDetachRight(object? sender, RoutedEventArgs e)
     {
-        if (_rightSatellite == null) return;
-        _manager?.Detach(_rightSatellite, closeSatellite: true);
+        if (_rightSatellite == null || _manager == null) return;
+        if (_manager.IsDocked(_rightSatellite))
+            _manager.Undock(_rightSatellite);
+        _manager.Detach(_rightSatellite, closeSatellite: true);
         _rightSatellite = null;
     }
 
@@ -80,17 +133,17 @@ public partial class MainWindow : Window
         _manager?.DetachAll();
         _leftSatellite = null;
         _rightSatellite = null;
+        LeftDockArea.Child = null; LeftDockArea.IsVisible = false;
+        RightDockArea.Child = null; RightDockArea.IsVisible = false;
+        _dockedContent.Clear();
     }
 
-    /// <summary>
-    /// Re-discover attached satellites from the manager (handles re-snap)
-    /// and update the UI.
-    /// </summary>
+    // ── Status sync ─────────────────────────────────────────────────
+
     private void SyncAndUpdateStatus()
     {
         if (_manager == null) return;
 
-        // Sync references: filter by direct children of main window only
         var leftAtt = _manager.Attachments.FirstOrDefault(a => a.Edge == SnapEdge.Left && a.Parent == _manager.MainWindow);
         var rightAtt = _manager.Attachments.FirstOrDefault(a => a.Edge == SnapEdge.Right && a.Parent == _manager.MainWindow);
 
@@ -99,29 +152,36 @@ public partial class MainWindow : Window
 
         bool leftAttached = leftAtt != null;
         bool rightAttached = rightAtt != null;
-        bool hasFloating = (_leftSatellite != null && !leftAttached)
-                        || (_rightSatellite != null && !rightAttached);
+        bool leftDocked = _leftSatellite != null && _manager.IsDocked(_leftSatellite);
+        bool rightDocked = _rightSatellite != null && _manager.IsDocked(_rightSatellite);
+        bool hasFloating = (_leftSatellite != null && !leftAttached && !leftDocked)
+                        || (_rightSatellite != null && !rightAttached && !rightDocked);
 
         var parts = new List<string>();
-        if (leftAttached) parts.Add("Left");
-        if (rightAttached) parts.Add("Right");
+        if (leftDocked) parts.Add("Left(docked)");
+        else if (leftAttached) parts.Add("Left");
+        if (rightDocked) parts.Add("Right(docked)");
+        else if (rightAttached) parts.Add("Right");
 
         StatusText.Text = parts.Count > 0
-            ? $"Attached: {string.Join(", ", parts)}"
-            : hasFloating
-                ? "Drag near edge to re-snap"
-                : "No satellites attached";
+            ? $"Satellites: {string.Join(", ", parts)}"
+            : hasFloating ? "Drag near edge to re-snap" : "No satellites";
 
-        DetachLeftBtn.IsEnabled = leftAttached;
-        DetachRightBtn.IsEnabled = rightAttached;
+        DetachLeftBtn.IsEnabled = leftAttached || leftDocked;
+        DetachRightBtn.IsEnabled = rightAttached || rightDocked;
         AttachLeftBtn.IsEnabled = _leftSatellite == null;
         AttachRightBtn.IsEnabled = _rightSatellite == null;
         AttachBottomBtn.IsEnabled = rightAttached;
+
+        DockLeftBtn.IsEnabled = _leftSatellite != null && (leftAttached || leftDocked);
+        DockLeftBtn.Content = leftDocked ? "Undock Left" : "Dock Left";
+        DockRightBtn.IsEnabled = _rightSatellite != null && (rightAttached || rightDocked);
+        DockRightBtn.Content = rightDocked ? "Undock Right" : "Dock Right";
     }
 
     private static SatelliteWindow CreateSatellitePanel(string title, Color accentColor)
     {
-        var satellite = new SatelliteWindow
+        return new SatelliteWindow
         {
             Title = title,
             Width = 250,
@@ -145,7 +205,7 @@ public partial class MainWindow : Window
                         },
                         new TextBlock
                         {
-                            Text = "This is a satellite window.\nMove the main window — I follow!",
+                            Text = "Satellite panel content.\nDock me or snap me!",
                             TextAlignment = Avalonia.Media.TextAlignment.Center,
                             Opacity = 0.7
                         }
@@ -153,8 +213,6 @@ public partial class MainWindow : Window
                 }
             }
         };
-
-        return satellite;
     }
 
     protected override void OnClosed(EventArgs e)

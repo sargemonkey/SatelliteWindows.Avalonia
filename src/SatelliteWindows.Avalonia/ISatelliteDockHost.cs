@@ -2,13 +2,22 @@ namespace SatelliteWindows.Avalonia;
 
 /// <summary>
 /// Interface for main windows that support docking satellites as internal panels.
-/// Phase 3 feature — stub for forward compatibility.
+/// The host controls WHERE and HOW content is embedded in its layout.
+/// The manager controls lifecycle, state, and gesture detection.
 /// </summary>
 public interface ISatelliteDockHost
 {
-    /// <summary>Dock a satellite as an internal panel on the specified edge.</summary>
-    void DockSatellite(SatelliteWindow satellite, SnapEdge edge);
+    /// <summary>
+    /// Attempt to dock a satellite's content as an internal panel.
+    /// The host should extract satellite.Content, embed it in its layout,
+    /// and return true on success. The manager will hide the satellite window.
+    /// </summary>
+    bool TryDockSatellite(SatelliteWindow satellite, SnapEdge edge);
 
-    /// <summary>Undock a satellite, returning it to external satellite mode.</summary>
-    void UndockSatellite(SatelliteWindow satellite);
+    /// <summary>
+    /// Attempt to undock a satellite's content from the internal layout.
+    /// The host should extract the content from its layout and restore it
+    /// to satellite.Content, then return true. The manager will re-show the window.
+    /// </summary>
+    bool TryUndockSatellite(SatelliteWindow satellite);
 }

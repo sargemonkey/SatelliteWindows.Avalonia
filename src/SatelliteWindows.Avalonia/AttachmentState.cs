@@ -9,5 +9,6 @@ public record AttachmentState(
     SnapEdge Edge,
     double OffsetAlongEdge,
     double Width,
-    double Height
+    double Height,
+    bool IsDocked = false
 );
