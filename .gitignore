@@ -50,3 +50,5 @@ Thumbs.db
 # User-specific
 *.env
 *.local
+/PLAN-tri-role-windows.md
+/src/SatelliteWindows.Avalonia.Dock/build

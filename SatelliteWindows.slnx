@@ -5,6 +5,20 @@
   <Folder Name="/src/">
     <Project Path="src/SatelliteWindows.Avalonia/SatelliteWindows.Avalonia.csproj" />
   </Folder>
+  <Folder Name="/src/Dock (vendored)/">
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Avalonia/SatelliteWindows.Dock.Avalonia.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Avalonia.Themes.Fluent/SatelliteWindows.Dock.Avalonia.Themes.Fluent.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Controls.DeferredContentControl/SatelliteWindows.Dock.Controls.DeferredContentControl.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Controls.ProportionalStackPanel/SatelliteWindows.Dock.Controls.ProportionalStackPanel.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Controls.Recycling/SatelliteWindows.Dock.Controls.Recycling.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Controls.Recycling.Model/SatelliteWindows.Dock.Controls.Recycling.Model.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.MarkupExtension/SatelliteWindows.Dock.MarkupExtension.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Model/SatelliteWindows.Dock.Model.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Model.Mvvm/SatelliteWindows.Dock.Model.Mvvm.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Serializer.SystemTextJson/SatelliteWindows.Dock.Serializer.SystemTextJson.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Serializer.SystemTextJson.Generators/SatelliteWindows.Dock.Serializer.SystemTextJson.Generators.csproj" />
+    <Project Path="src/SatelliteWindows.Avalonia.Dock/src/SatelliteWindows.Dock.Settings/SatelliteWindows.Dock.Settings.csproj" />
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/SatelliteWindows.Avalonia.Tests/SatelliteWindows.Avalonia.Tests.csproj" />
   </Folder>

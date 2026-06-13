@@ -1,223 +1,241 @@
+using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Interactivity;
+using Avalonia.Input;
 using Avalonia.Media;
 using SatelliteWindows.Avalonia;
 
 namespace SatelliteDemo;
 
-public partial class MainWindow : Window, ISatelliteDockHost
+public partial class MainWindow : Window
 {
-    private SatelliteManager? _manager;
-    private SatelliteWindow? _leftSatellite;
-    private SatelliteWindow? _rightSatellite;
-    private readonly Dictionary<SatelliteWindow, (object? content, Border dockArea)> _dockedContent = new();
+    private const string PanelId = "tools";
+    private const double DragThresholdPx = 8;
+
+    private SatelliteDockManager? _manager;
+    private ToolsPanel? _panel;
+    private SatelliteWindow? _external; // currently popped-out window (Satellite or Floating)
+    private bool _dockBackArmed; // true once the popped-out window has moved fully outside the slot
+
+    private Point _pressOrigin;
+    private bool _isPotentialDrag;
+    private PointerPressedEventArgs? _pressArgs;
 
     public MainWindow()
     {
         InitializeComponent();
-        Opened += OnMainOpened;
+        Opened += OnOpened;
+
+        DragGrip.PointerPressed += OnGripPressed;
+        DragGrip.PointerMoved += OnGripMoved;
+        DragGrip.PointerReleased += OnGripReleased;
     }
 
-    private void OnMainOpened(object? sender, EventArgs e)
+    private void OnOpened(object? sender, EventArgs e)
     {
-        _manager = new SatelliteManager(this);
-        _manager.AttachmentChanged += SyncAndUpdateStatus;
+        _panel = new ToolsPanel(BuildPanelContent());
+        var bridge = new SingleDockBridge(_panel, DockContentHost, DragGrip, DropPlaceholder);
+
+        _manager = new SatelliteDockManager(this, bridge);
+        _manager.SatelliteCreated += OnPoppedOut;
+        _manager.SatelliteClosedByUser += _ => { _external = null; UpdateStatus(); };
+        _manager.SatelliteManager.AttachmentChanged += UpdateStatus;
+
+        _manager.SetMode(PanelId, SatelliteDockManager.PanelMode.Docked);
+        UpdateStatus();
     }
 
-    // ── ISatelliteDockHost ──────────────────────────────────────────
+    // ── Grip drag → detach to Satellite at cursor ───────────────────
 
-    public bool TryDockSatellite(SatelliteWindow satellite, SnapEdge edge)
+    private void OnGripPressed(object? sender, PointerPressedEventArgs e)
     {
-        var dockArea = edge == SnapEdge.Left ? LeftDockArea : RightDockArea;
-        if (dockArea.IsVisible) return false;
-
-        var content = satellite.Content;
-        satellite.Content = null;
-        dockArea.Child = content as Control;
-        dockArea.IsVisible = true;
-        _dockedContent[satellite] = (content, dockArea);
-        return true;
+        if (_external != null) return; // already popped out
+        _pressOrigin = e.GetPosition(this);
+        _isPotentialDrag = true;
+        _pressArgs = e;
+        e.Pointer.Capture(DragGrip);
     }
 
-    public bool TryUndockSatellite(SatelliteWindow satellite)
+    private void OnGripMoved(object? sender, PointerEventArgs e)
     {
-        if (!_dockedContent.TryGetValue(satellite, out var info)) return false;
+        if (!_isPotentialDrag || _manager == null) return;
+        var p = e.GetPosition(this);
+        if (Math.Abs(p.X - _pressOrigin.X) + Math.Abs(p.Y - _pressOrigin.Y) < DragThresholdPx)
+            return;
 
-        var content = info.dockArea.Child;
-        info.dockArea.Child = null;
-        info.dockArea.IsVisible = false;
-        satellite.Content = content;
-        _dockedContent.Remove(satellite);
-        return true;
-    }
+        // Threshold crossed — pop out as Satellite, hand the drag off to the new window.
+        _isPotentialDrag = false;
+        e.Pointer.Capture(null);
 
-    // ── Button handlers ─────────────────────────────────────────────
-
-    private void OnAttachLeft(object? sender, RoutedEventArgs e)
-    {
-        if (_manager == null || _leftSatellite != null) return;
-        _leftSatellite = CreateSatellitePanel("Left Panel", Colors.DarkSlateBlue);
-        _leftSatellite.Closed += (_, _) => { _leftSatellite = null; SyncAndUpdateStatus(); };
-        _manager.Attach(_leftSatellite, SnapEdge.Left);
-    }
-
-    private void OnAttachRight(object? sender, RoutedEventArgs e)
-    {
-        if (_manager == null || _rightSatellite != null) return;
-        _rightSatellite = CreateSatellitePanel("Right Panel", Colors.DarkOliveGreen);
-        _rightSatellite.Closed += (_, _) => { _rightSatellite = null; SyncAndUpdateStatus(); };
-        _manager.Attach(_rightSatellite, SnapEdge.Right);
-    }
-
-    private void OnAttachBottomToRight(object? sender, RoutedEventArgs e)
-    {
-        if (_manager == null || _rightSatellite == null || !_rightSatellite.IsAttached) return;
-        var chained = CreateSatellitePanel("Chained (Bottom->R)", Colors.DarkGoldenrod);
-        chained.Height = 200;
-        chained.Closed += (_, _) => SyncAndUpdateStatus();
-        _manager.Attach(chained, _rightSatellite, SnapEdge.Bottom);
-    }
-
-    private void OnStackRight(object? sender, RoutedEventArgs e)
-    {
-        if (_manager == null) return;
-        int count = _manager.GetChildren(_manager.MainWindow).Count(a => a.Edge == SnapEdge.Right) + 1;
-        var stacked = CreateSatellitePanel($"Right #{count}", Colors.DarkCyan);
-        stacked.Height = 200;
-        stacked.Closed += (_, _) => SyncAndUpdateStatus();
-        _manager.Attach(stacked, SnapEdge.Right);
-    }
-
-    private void OnDockLeft(object? sender, RoutedEventArgs e)
-    {
-        if (_leftSatellite != null && _manager != null)
+        _manager.SetMode(PanelId, SatelliteDockManager.PanelMode.Satellite);
+        if (_external != null)
         {
-            if (_manager.IsDocked(_leftSatellite))
-                _manager.Undock(_leftSatellite);
-            else
-                _manager.Dock(_leftSatellite, SnapEdge.Left);
-        }
-    }
-
-    private void OnDockRight(object? sender, RoutedEventArgs e)
-    {
-        if (_rightSatellite != null && _manager != null)
-        {
-            if (_manager.IsDocked(_rightSatellite))
-                _manager.Undock(_rightSatellite);
-            else
-                _manager.Dock(_rightSatellite, SnapEdge.Right);
-        }
-    }
-
-    private void OnDetachLeft(object? sender, RoutedEventArgs e)
-    {
-        if (_leftSatellite == null || _manager == null) return;
-        if (_manager.IsDocked(_leftSatellite))
-            _manager.Undock(_leftSatellite);
-        _manager.Detach(_leftSatellite, closeSatellite: true);
-        _leftSatellite = null;
-    }
-
-    private void OnDetachRight(object? sender, RoutedEventArgs e)
-    {
-        if (_rightSatellite == null || _manager == null) return;
-        if (_manager.IsDocked(_rightSatellite))
-            _manager.Undock(_rightSatellite);
-        _manager.Detach(_rightSatellite, closeSatellite: true);
-        _rightSatellite = null;
-    }
-
-    private void OnDetachAll(object? sender, RoutedEventArgs e)
-    {
-        _manager?.DetachAll();
-        _leftSatellite = null;
-        _rightSatellite = null;
-        LeftDockArea.Child = null; LeftDockArea.IsVisible = false;
-        RightDockArea.Child = null; RightDockArea.IsVisible = false;
-        _dockedContent.Clear();
-    }
-
-    // ── Status sync ─────────────────────────────────────────────────
-
-    private void SyncAndUpdateStatus()
-    {
-        if (_manager == null) return;
-
-        var leftAtt = _manager.Attachments.FirstOrDefault(a => a.Edge == SnapEdge.Left && a.Parent == _manager.MainWindow);
-        var rightAtt = _manager.Attachments.FirstOrDefault(a => a.Edge == SnapEdge.Right && a.Parent == _manager.MainWindow);
-
-        if (leftAtt != null) _leftSatellite = leftAtt.Satellite;
-        if (rightAtt != null) _rightSatellite = rightAtt.Satellite;
-
-        bool leftAttached = leftAtt != null;
-        bool rightAttached = rightAtt != null;
-        bool leftDocked = _leftSatellite != null && _manager.IsDocked(_leftSatellite);
-        bool rightDocked = _rightSatellite != null && _manager.IsDocked(_rightSatellite);
-        bool hasFloating = (_leftSatellite != null && !leftAttached && !leftDocked)
-                        || (_rightSatellite != null && !rightAttached && !rightDocked);
-
-        var parts = new List<string>();
-        if (leftDocked) parts.Add("Left(docked)");
-        else if (leftAttached) parts.Add("Left");
-        if (rightDocked) parts.Add("Right(docked)");
-        else if (rightAttached) parts.Add("Right");
-
-        StatusText.Text = parts.Count > 0
-            ? $"Satellites: {string.Join(", ", parts)}"
-            : hasFloating ? "Drag near edge to re-snap" : "No satellites";
-
-        DetachLeftBtn.IsEnabled = leftAttached || leftDocked;
-        DetachRightBtn.IsEnabled = rightAttached || rightDocked;
-        AttachLeftBtn.IsEnabled = _leftSatellite == null;
-        AttachRightBtn.IsEnabled = _rightSatellite == null;
-        AttachBottomBtn.IsEnabled = rightAttached;
-
-        DockLeftBtn.IsEnabled = _leftSatellite != null && (leftAttached || leftDocked);
-        DockLeftBtn.Content = leftDocked ? "Undock Left" : "Dock Left";
-        DockRightBtn.IsEnabled = _rightSatellite != null && (rightAttached || rightDocked);
-        DockRightBtn.Content = rightDocked ? "Undock Right" : "Dock Right";
-    }
-
-    private static SatelliteWindow CreateSatellitePanel(string title, Color accentColor)
-    {
-        return new SatelliteWindow
-        {
-            Title = title,
-            Width = 250,
-            Height = 350,
-            Content = new Border
+            // Reposition the satellite under the cursor and start an OS-level move drag.
+            var screen = this.PointToScreen(p);
+            _external.Position = new PixelPoint(screen.X - 60, screen.Y - 12);
+            try
             {
-                Background = new SolidColorBrush(accentColor, 0.3),
-                Child = new StackPanel
-                {
-                    VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
-                    HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center,
-                    Spacing = 10,
-                    Children =
-                    {
-                        new TextBlock
-                        {
-                            Text = title,
-                            FontSize = 18,
-                            FontWeight = FontWeight.SemiBold,
-                            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center
-                        },
-                        new TextBlock
-                        {
-                            Text = "Satellite panel content.\nDock me or snap me!",
-                            TextAlignment = Avalonia.Media.TextAlignment.Center,
-                            Opacity = 0.7
-                        }
-                    }
-                }
+                if (_pressArgs != null) _external.BeginMoveDrag(_pressArgs);
             }
+            catch { /* drag may not start if pointer already released */ }
+        }
+        _pressArgs = null;
+    }
+
+    private void OnGripReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _isPotentialDrag = false;
+        _pressArgs = null;
+        e.Pointer.Capture(null);
+    }
+
+    // ── Popped-out window lifecycle ─────────────────────────────────
+
+    private void OnPoppedOut(SatelliteWindow window, ISatellitePanel _)
+    {
+        _external = window;
+        _dockBackArmed = false; // user must drag the window fully clear of the slot before re-dock arms
+        window.PositionChanged += OnExternalPositionChanged;
+        window.Closed += (_, _) =>
+        {
+            window.PositionChanged -= OnExternalPositionChanged;
+            if (_external == window) _external = null;
+            UpdateStatus();
         };
+    }
+
+    private void OnExternalPositionChanged(object? sender, PixelPointEventArgs e)
+    {
+        if (sender is not SatelliteWindow w || _manager == null) return;
+        if (_external != w) return; // already docked back; ignore late events
+
+        bool overlaps = PointerOverlapsDockSlot(w);
+
+        if (!_dockBackArmed)
+        {
+            if (!overlaps) _dockBackArmed = true;
+            return;
+        }
+
+        if (overlaps)
+        {
+            _external = null; // clear first so re-entrant PositionChanged short-circuits
+            _manager.SetMode(PanelId, SatelliteDockManager.PanelMode.Docked);
+            UpdateStatus();
+        }
+    }
+
+    private bool PointerOverlapsDockSlot(SatelliteWindow w)
+    {
+        try
+        {
+            var topLeft = DockSlot.PointToScreen(new Point(0, 0));
+            var scaling = RenderScaling;
+            var slotW = (int)(DockSlot.Bounds.Width * scaling);
+            var slotH = (int)(DockSlot.Bounds.Height * scaling);
+            int cx = w.Position.X + (int)(w.Width * scaling / 2);
+            int cy = w.Position.Y + (int)(w.Height * scaling / 2);
+            return cx >= topLeft.X && cx <= topLeft.X + slotW
+                && cy >= topLeft.Y && cy <= topLeft.Y + slotH;
+        }
+        catch { return false; }
+    }
+
+    private void UpdateStatus()
+    {
+        if (_manager == null) return;
+        var mode = _manager.GetMode(PanelId);
+        var roleSuffix = _external != null ? $"  (window role = {_external.Role})" : "";
+        StatusText.Text = $"Mode: {mode}{roleSuffix}";
     }
 
     protected override void OnClosed(EventArgs e)
     {
         _manager?.Dispose();
         base.OnClosed(e);
+    }
+
+    // ── Panel content ──
+
+    private static Control BuildPanelContent() => new Border
+    {
+        Padding = new Thickness(16),
+        Child = new StackPanel
+        {
+            Spacing = 10,
+            VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center,
+            Children =
+            {
+                new TextBlock { Text = "Tools Panel", FontSize = 18,
+                    FontWeight = FontWeight.SemiBold, Foreground = Brushes.White },
+                new TextBlock {
+                    Text = "Same instance — docked, floating, or satellite.\n" +
+                           "Grip ↑ to detach, drop back on the slot to dock.",
+                    Foreground = new SolidColorBrush(Color.FromRgb(0xC0, 0xC0, 0xC0)),
+                    TextWrapping = TextWrapping.Wrap }
+            }
+        }
+    };
+
+    // ── Minimal ISatellitePanel + ISatelliteDockBridge for one panel ──
+
+    private sealed class ToolsPanel : ISatellitePanel
+    {
+        public ToolsPanel(Control content) { Content = content; }
+        public string Id => PanelId;
+        public string? Title => "Tools";
+        public object Content { get; }
+        public SnapEdge DefaultSnapEdge => SnapEdge.Right;
+        public double DefaultSatelliteWidth => 260;
+        public double DefaultSatelliteHeight => 0;
+    }
+
+    /// <summary>
+    /// Bridge for a single panel. Keeps the dock slot visible at all times so it
+    /// doubles as a drop target — only the inner content swaps in/out.
+    /// </summary>
+    private sealed class SingleDockBridge : ISatelliteDockBridge
+    {
+        private readonly ToolsPanel _panel;
+        private readonly ContentControl _host;
+        private readonly Control _grip;
+        private readonly Control _placeholder;
+
+        public SingleDockBridge(ToolsPanel panel, ContentControl host, Control grip, Control placeholder)
+        {
+            _panel = panel; _host = host; _grip = grip; _placeholder = placeholder;
+        }
+
+        public ISatellitePanel? FindPanel(string id) => id == _panel.Id ? _panel : null;
+        public bool IsDocked(string id) => id == _panel.Id && _host.Content != null;
+
+        public bool ShowDocked(string id)
+        {
+            if (id != _panel.Id) return false;
+            _host.Content = _panel.Content;
+            _host.IsVisible = true;
+            _grip.IsVisible = true;
+            _placeholder.IsVisible = false;
+            return true;
+        }
+
+        public bool HideFromDock(string id)
+        {
+            if (id != _panel.Id) return false;
+            _host.Content = null;
+            _grip.IsVisible = false;
+            _placeholder.IsVisible = true;
+            return true;
+        }
+
+        public ISatellitePanel? ExtractForSatellite(string id)
+        {
+            if (id != _panel.Id) return null;
+            _host.Content = null;
+            _grip.IsVisible = false;
+            _placeholder.IsVisible = true; // becomes the drop target
+            return _panel;
+        }
+
+        public bool ReinsertFromSatellite(string id) => ShowDocked(id);
     }
 }

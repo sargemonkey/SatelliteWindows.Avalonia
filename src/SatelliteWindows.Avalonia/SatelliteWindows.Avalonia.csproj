@@ -18,11 +18,23 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.*" />
+    <!-- The vendored Dock.Avalonia stack is now a one-way dependency:
+         SatelliteWindow inherits Dock's HostWindow (apex unification), so
+         SatelliteWindows.Avalonia must reference the vendored Dock projects.
+         All vendored projects use the SatelliteWindows.Dock.* namespace
+         after rebrand — no "Dock.*" name leaks into consumers. -->
+    <ProjectReference Include="..\SatelliteWindows.Avalonia.Dock\src\SatelliteWindows.Dock.Avalonia\SatelliteWindows.Dock.Avalonia.csproj" />
+    <ProjectReference Include="..\SatelliteWindows.Avalonia.Dock\src\SatelliteWindows.Dock.Avalonia.Themes.Fluent\SatelliteWindows.Dock.Avalonia.Themes.Fluent.csproj" />
+    <ProjectReference Include="..\SatelliteWindows.Avalonia.Dock\src\SatelliteWindows.Dock.Controls.Recycling\SatelliteWindows.Dock.Controls.Recycling.csproj" />
+    <ProjectReference Include="..\SatelliteWindows.Avalonia.Dock\src\SatelliteWindows.Dock.Model.Mvvm\SatelliteWindows.Dock.Model.Mvvm.csproj" />
+    <ProjectReference Include="..\SatelliteWindows.Avalonia.Dock\src\SatelliteWindows.Dock.Serializer.SystemTextJson\SatelliteWindows.Dock.Serializer.SystemTextJson.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="SatelliteWindows.Avalonia.Tests" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" />
+    <None Include="..\SatelliteWindows.Avalonia.Dock\LICENSE-Dock.TXT" Pack="true" PackagePath="\" />
   </ItemGroup>
 </Project>

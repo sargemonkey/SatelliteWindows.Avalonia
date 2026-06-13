@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
+    <OutputType>Library</OutputType>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+    <AssemblyName>SatelliteWindows.Dock.Model.Mvvm</AssemblyName>
+    <RootNamespace>SatelliteWindows.Dock.Model.Mvvm</RootNamespace>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>SatelliteWindows.Dock.Model.Mvvm</PackageId>
+  </PropertyGroup>
+
+  <Import Project="..\..\build\SignAssembly.props" />
+  <Import Project="..\..\build\SourceLink.props" />
+  <Import Project="..\..\build\ReferenceAssemblies.props" />
+  <Import Project="..\..\build\CommunityToolkit.Mvvm.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\SatelliteWindows.Dock.Model\SatelliteWindows.Dock.Model.csproj" />
+  </ItemGroup>
+
+</Project>

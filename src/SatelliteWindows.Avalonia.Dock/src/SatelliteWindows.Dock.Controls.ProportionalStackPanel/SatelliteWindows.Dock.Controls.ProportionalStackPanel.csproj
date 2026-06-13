@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Library</OutputType>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+    <AssemblyName>SatelliteWindows.Dock.Controls.ProportionalStackPanel</AssemblyName>
+    <RootNamespace>SatelliteWindows.Dock.Controls.ProportionalStackPanel</RootNamespace>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Dock.Controls.ProportionalStackPanel</RootNamespace>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>SatelliteWindows.Dock.Controls.ProportionalStackPanel</PackageId>
+  </PropertyGroup>
+
+  <Import Project="..\..\build\SignAssembly.props" />
+  <Import Project="..\..\build\SourceLink.props" />
+  <Import Project="..\..\build\ReferenceAssemblies.props" />
+  <Import Project="..\..\build\Avalonia.props" />
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\*" Exclude="bin\**;obj\**;**\*.xproj;packages\**;@(EmbeddedResource)" />
+  </ItemGroup>
+
+</Project>

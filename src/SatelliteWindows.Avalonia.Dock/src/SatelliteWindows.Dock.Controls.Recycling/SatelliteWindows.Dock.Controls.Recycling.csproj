@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Library</OutputType>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+    <AssemblyName>SatelliteWindows.Dock.Controls.Recycling</AssemblyName>
+    <RootNamespace>SatelliteWindows.Dock.Controls.Recycling</RootNamespace>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Avalonia.Controls.Recycling</RootNamespace>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>SatelliteWindows.Dock.Controls.Recycling</PackageId>
+  </PropertyGroup>
+
+  <Import Project="..\..\build\SignAssembly.props" />
+  <Import Project="..\..\build\SourceLink.props" />
+  <Import Project="..\..\build\ReferenceAssemblies.props" />
+  <Import Project="..\..\build\Avalonia.props" />
+
+  <ItemGroup>
+    <AvaloniaResource Include="Assets\*" Exclude="bin\**;obj\**;**\*.xproj;packages\**;@(EmbeddedResource)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SatelliteWindows.Dock.Controls.Recycling.Model\SatelliteWindows.Dock.Controls.Recycling.Model.csproj" />
+  </ItemGroup>
+
+</Project>

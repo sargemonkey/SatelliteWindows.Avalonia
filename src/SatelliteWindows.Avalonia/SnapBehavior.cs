@@ -5,6 +5,15 @@ namespace SatelliteWindows.Avalonia;
 /// </summary>
 public sealed class SnapBehavior
 {
+    /// <summary>
+    /// Master switch for snap behaviour. When <c>false</c>, the manager continues to
+    /// track satellites for follow-on-resize / minimize-with-main / close-with-main,
+    /// but the magnetic snap detection, drag-away detach, and re-snap monitoring are
+    /// short-circuited — useful when a window is attached in <see cref="WindowRole.Floating"/>
+    /// style (tracked but free-floating). Default <c>true</c>.
+    /// </summary>
+    public bool Enabled { get; set; } = true;
+
     /// <summary>Distance in pixels within which magnetic snapping activates.</summary>
     public int MagneticThresholdPx { get; set; } = 40;
 

@@ -1,0 +1,50 @@
+SatelliteWindows.Avalonia — Third-Party Notices
+================================================
+
+This product bundles third-party code that is licensed separately. The notices
+below preserve the original copyright and license text as required by each
+license.
+
+--------------------------------------------------------------------------------
+1. Dock.Avalonia
+--------------------------------------------------------------------------------
+
+Source:   https://github.com/wieslawsoltes/Dock
+Version:  v12.0.0.2
+Author:   Wiesław Šoltés
+License:  MIT
+Location: src/SatelliteWindows.Avalonia.Dock/ (12 vendored projects, prefixed
+          SatelliteWindows.Dock.*)
+
+A renamed copy of Dock.Avalonia is vendored under
+src/SatelliteWindows.Avalonia.Dock/. The only source-level modification to the
+upstream code is the removal of the `sealed` keyword from
+`HostWindow.axaml.cs` so that SatelliteWindow can inherit from it; all project
+files were renamed to the `SatelliteWindows.Dock.*` prefix and namespaces
+updated accordingly. See src/SatelliteWindows.Avalonia.Dock/README.md for full
+details.
+
+License text (verbatim from upstream, also at
+src/SatelliteWindows.Avalonia.Dock/LICENSE-Dock.TXT):
+
+    The MIT License (MIT)
+
+    Copyright (c) Wiesław Šoltés
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.

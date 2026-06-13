@@ -1,57 +1,45 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         x:Class="SatelliteDemo.MainWindow"
-        Title="Satellite Demo — Main Window"
-        Width="600" Height="400">
+        Title="Tri-role Demo — drag to detach / snap / dock"
+        Width="780" Height="480">
 
     <DockPanel>
-        <!-- Dock targets (hidden until used) -->
-        <Border x:Name="LeftDockArea" DockPanel.Dock="Left" IsVisible="False"
-                Width="250" Background="#30483D8B" />
-        <Border x:Name="RightDockArea" DockPanel.Dock="Right" IsVisible="False"
-                Width="250" Background="#30556B2F" />
-
-        <!-- Main content -->
-        <StackPanel Margin="20" Spacing="10" VerticalAlignment="Center" HorizontalAlignment="Center">
-            <TextBlock Text="Satellite Window Demo"
-                       FontSize="24" FontWeight="Bold"
-                       HorizontalAlignment="Center" />
-
-            <TextBlock x:Name="StatusText"
-                       Text="No satellites attached"
-                       HorizontalAlignment="Center"
-                       Margin="0,10,0,20" />
-
-            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-                <Button x:Name="AttachLeftBtn" Content="Attach Left"
-                        Click="OnAttachLeft" Width="120" />
-                <Button x:Name="AttachRightBtn" Content="Attach Right"
-                        Click="OnAttachRight" Width="120" />
+        <!-- Status -->
+        <Border DockPanel.Dock="Top" Padding="12" Background="#202020">
+            <StackPanel>
+                <TextBlock Text="Drag the grip out of the dock slot. Drop near a main-window edge to snap; drop on the dock slot to re-dock; drop anywhere else to float."
+                           Foreground="#C0C0C0" TextWrapping="Wrap" />
+                <TextBlock x:Name="StatusText" Foreground="#80C080" Margin="0,6,0,0" Text="Mode: Docked" />
             </StackPanel>
+        </Border>
 
-            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-                <Button x:Name="AttachBottomBtn" Content="Chain Bottom→R"
-                        Click="OnAttachBottomToRight" Width="120" IsEnabled="False" />
-                <Button x:Name="StackRightBtn" Content="Stack Right"
-                        Click="OnStackRight" Width="120" />
-            </StackPanel>
+        <!-- Dock slot (always visible — doubles as drop target) -->
+        <Border x:Name="DockSlot" DockPanel.Dock="Right" Width="260"
+                Background="#30556B2F" BorderBrush="#80556B2F" BorderThickness="2"
+                Padding="0">
+            <DockPanel x:Name="DockSlotLayout">
+                <!-- Drag grip (shown when content is docked) -->
+                <Border x:Name="DragGrip" DockPanel.Dock="Top"
+                        Background="#406B8E23" Padding="8"
+                        Cursor="SizeAll">
+                    <TextBlock Text="≡  Tools  (drag to detach)" Foreground="White" />
+                </Border>
+                <!-- Drop placeholder (shown when content is popped out) -->
+                <TextBlock x:Name="DropPlaceholder" IsVisible="False"
+                           Text="Drop window here to dock"
+                           Foreground="#A0A0A0" FontStyle="Italic"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           TextAlignment="Center" />
+                <!-- Live panel content goes here when docked -->
+                <ContentControl x:Name="DockContentHost" />
+            </DockPanel>
+        </Border>
 
-            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-                <Button x:Name="DockLeftBtn" Content="Dock Left"
-                        Click="OnDockLeft" Width="120" IsEnabled="False" />
-                <Button x:Name="DockRightBtn" Content="Dock Right"
-                        Click="OnDockRight" Width="120" IsEnabled="False" />
-            </StackPanel>
-
-            <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Center">
-                <Button x:Name="DetachLeftBtn" Content="Detach Left"
-                        Click="OnDetachLeft" Width="120" IsEnabled="False" />
-                <Button x:Name="DetachRightBtn" Content="Detach Right"
-                        Click="OnDetachRight" Width="120" IsEnabled="False" />
-            </StackPanel>
-
-            <Button Content="Detach All" Click="OnDetachAll"
-                    HorizontalAlignment="Center" Width="250" Margin="0,10,0,0" />
-        </StackPanel>
+        <Border Background="#101010">
+            <TextBlock Text="Main window content"
+                       Foreground="#808080" FontSize="20"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
     </DockPanel>
 </Window>

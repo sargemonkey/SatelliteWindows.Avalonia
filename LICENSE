@@ -19,3 +19,12 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+--------------------------------------------------------------------------------
+
+This product also bundles third-party code that is licensed separately. See
+THIRD-PARTY-NOTICES.txt at the root of this repository (and in the NuGet
+package) for the full notices, in particular for the vendored Dock.Avalonia
+fork (Copyright (c) Wiesław Šoltés, MIT) under
+src/SatelliteWindows.Avalonia.Dock/.
+

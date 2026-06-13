@@ -8,6 +8,21 @@ namespace SatelliteWindows.Avalonia;
 /// Manages satellite windows attached to a main window.
 /// Supports snap chaining (satellite-to-satellite trees), edge stacking,
 /// magnetic snap to any managed window, drag-away detach, and persist/restore.
+///
+/// <para><b>Role-preservation contract:</b> when a <see cref="SatelliteWindow"/>
+/// has <see cref="SatelliteWindow.Role"/> == <see cref="WindowRole.DockHost"/>,
+/// the manager preserves that role across
+/// <see cref="Attach(SatelliteWindow, SnapEdge, double)"/> /
+/// <see cref="Detach(SatelliteWindow, bool)"/> /
+/// <see cref="AttachFloating"/> instead of flipping to
+/// <see cref="WindowRole.Satellite"/> or <see cref="WindowRole.Floating"/>.
+/// This keeps the Dock framework's <c>ControlTheme</c> (chrome grips, tab
+/// strip, drag-back-to-dock detection) intact while the window is also being
+/// snap-managed. Auto-snap on drag is also skipped for <c>DockHost</c> windows
+/// because it interferes with Dock's drag-back-to-dock detection (the satellite
+/// would snap to a screen edge before the cursor could reach a drop zone).
+/// This is a deliberate cross-concern between the snap library and the
+/// vendored Dock framework — see PLAN-tri-role-windows.md for the rationale.</para>
 /// </summary>
 public sealed class SatelliteManager : IDisposable
 {
@@ -20,6 +35,7 @@ public sealed class SatelliteManager : IDisposable
     private readonly Dictionary<SatelliteWindow, (EventHandler<PixelPointEventArgs> pos, EventHandler closed)> _reSnapHandlers = new();
     private readonly Dictionary<SatelliteWindow, SnapEdge> _dockedSatellites = new();
     private readonly Dictionary<SatelliteWindow, DateTime> _detachedAt = new();
+    private readonly Dictionary<SatelliteWindow, EventHandler> _floatingTracked = new();
     private bool _isDisposed;
     private bool _isClosingAll;
     private bool _isRepositioning;
@@ -49,6 +65,88 @@ public sealed class SatelliteManager : IDisposable
     /// <summary>Attach a satellite to the main window''s edge.</summary>
     public void Attach(SatelliteWindow satellite, SnapEdge edge, double offsetAlongEdge = 0)
         => AttachCore(satellite, _mainWindow, edge, offsetAlongEdge);
+
+    /// <summary>
+    /// Track a window in <see cref="WindowRole.Floating"/> mode — no snap, no edge
+    /// positioning, but the manager still owns its lifecycle (close-with-main,
+    /// minimize-with-main when <see cref="SnapBehavior.MinimizeWithMain"/> is on).
+    /// Use this to give a free-floating tool window the same lifecycle coupling as
+    /// snapped satellites without the magnetic behaviour.
+    /// </summary>
+    public void AttachFloating(SatelliteWindow satellite)
+    {
+        ArgumentNullException.ThrowIfNull(satellite);
+        ThrowIfDisposed();
+
+        if (satellite.Manager != null)
+            throw new InvalidOperationException("Satellite is already attached to a manager.");
+
+        satellite.Manager = this;
+        // Preserve DockHost role for Dock-framework-owned windows so they keep
+        // HostWindow's ControlTheme (which renders the dragged-out content via
+        // the dock tab strip + DockControl). For non-dock-host windows, set
+        // Floating so SatelliteWindow's StyleKeyOverride falls back to the
+        // plain Window theme.
+        if (satellite.Role != WindowRole.DockHost)
+            satellite.Role = WindowRole.Floating;
+
+        EventHandler onClosed = (_, _) => OnFloatingClosed(satellite);
+        satellite.Closed += onClosed;
+        _floatingTracked[satellite] = onClosed;
+
+        // Enable magnetic snap on user drag if behavior allows. AttachFloating
+        // previously only wired follow-main-on-move (via _floatingTracked); the
+        // snap-near-edge gesture lived only in the post-Detach code path. For
+        // floating windows that were never Attach()'d (e.g. drag-outs that
+        // started life as floating), we need explicit re-snap monitoring too.
+        //
+        // EXCEPTION: skip for DockHost role. Auto-snap during a Dock-framework
+        // drag interferes with Dock's drag-back-to-dock detection — as soon as
+        // the window enters MagneticThresholdPx of an edge it snaps, freezing
+        // the cursor before it can reach the dock's drop zones. DockHost windows
+        // get snap-on-drag via the explicit right-click "Snap to Edge" menu
+        // instead, leaving the native drag flow intact for drag-back-to-dock.
+        if (_behavior.AutoSnapOnDrag && satellite.Role != WindowRole.DockHost)
+            StartReSnapMonitoring(satellite);
+
+        if (!satellite.IsVisible)
+            satellite.Show(_mainWindow);
+
+        AttachmentChanged?.Invoke();
+    }
+
+    /// <summary>Stop tracking a floating-mode window. Reverses <see cref="AttachFloating"/>.</summary>
+    public void DetachFloating(SatelliteWindow satellite, bool closeSatellite = false)
+    {
+        ArgumentNullException.ThrowIfNull(satellite);
+        if (!_floatingTracked.TryGetValue(satellite, out var onClosed)) return;
+
+        satellite.Closed -= onClosed;
+        _floatingTracked.Remove(satellite);
+        satellite.Manager = null;
+        // Role stays Floating — that's the rest state.
+
+        // Mirror AttachFloating's resnap-monitoring setup teardown.
+        StopReSnapMonitoring(satellite);
+
+        if (closeSatellite)
+        {
+            FlushContentForReparent(satellite);
+            try { satellite.Close(); }
+            catch (InvalidOperationException) { }
+        }
+        AttachmentChanged?.Invoke();
+    }
+
+    private void OnFloatingClosed(SatelliteWindow satellite)
+    {
+        if (_isClosingAll || _isDisposed) return;
+        if (_floatingTracked.Remove(satellite, out _))
+        {
+            satellite.Manager = null;
+            AttachmentChanged?.Invoke();
+        }
+    }
 
     /// <summary>Attach a satellite to another satellite''s edge (chaining).</summary>
     public void Attach(SatelliteWindow satellite, SatelliteWindow parent, SnapEdge edge, double offsetAlongEdge = 0)
@@ -81,6 +179,8 @@ public sealed class SatelliteManager : IDisposable
                 UnsubscribeFromSatellite(att.Satellite);
                 att.Satellite.Attachment = null;
                 att.Satellite.Manager = null;
+                att.Satellite.Role = WindowRole.Floating;
+                FlushContentForReparent(att.Satellite);
                 try { att.Satellite.Close(); }
                 catch (InvalidOperationException) { }
             }
@@ -93,10 +193,23 @@ public sealed class SatelliteManager : IDisposable
             foreach (var (sat, _) in _dockedSatellites)
             {
                 sat.Manager = null;
+                sat.Role = WindowRole.Floating;
+                FlushContentForReparent(sat);
                 try { sat.Close(); }
                 catch (InvalidOperationException) { }
             }
             _dockedSatellites.Clear();
+
+            // Close floating-tracked windows
+            foreach (var (sat, handler) in _floatingTracked.ToArray())
+            {
+                sat.Closed -= handler;
+                sat.Manager = null;
+                FlushContentForReparent(sat);
+                try { sat.Close(); }
+                catch (InvalidOperationException) { }
+            }
+            _floatingTracked.Clear();
         }
         finally
         {
@@ -187,14 +300,31 @@ public sealed class SatelliteManager : IDisposable
     // ── Persist / Restore ───────────────────────────────────────────
 
     /// <summary>Serialize all satellites (external + docked). All must have SatelliteId set.</summary>
+    /// <exception cref="InvalidOperationException">Thrown <em>before</em> any state is
+    /// produced if any satellite is missing its <see cref="SatelliteWindow.SatelliteId"/>.</exception>
     public AttachmentState[] SaveState()
     {
-        var states = new List<AttachmentState>();
+        // Validate up-front so a single missing id doesn't leave the caller with a
+        // half-built (and silently dropped) list.
+        foreach (var a in _allAttachments)
+        {
+            if (a.Satellite.SatelliteId is null)
+                throw new InvalidOperationException(
+                    $"Satellite must have SatelliteId to save state (found unset id on a {a.Edge}-edge attachment).");
+        }
+        foreach (var (sat, edge) in _dockedSatellites)
+        {
+            if (sat.SatelliteId is null)
+                throw new InvalidOperationException(
+                    $"Satellite must have SatelliteId to save state (found unset id on a docked {edge}-edge satellite).");
+        }
+
+        var states = new List<AttachmentState>(_allAttachments.Count + _dockedSatellites.Count);
 
         foreach (var a in _allAttachments)
         {
             states.Add(new AttachmentState(
-                a.Satellite.SatelliteId ?? throw new InvalidOperationException("Satellite must have SatelliteId to save state."),
+                a.Satellite.SatelliteId!,
                 a.Parent == _mainWindow ? null : ((SatelliteWindow)a.Parent).SatelliteId,
                 a.Edge, a.OffsetAlongEdge, a.Satellite.Width, a.Satellite.Height));
         }
@@ -202,7 +332,7 @@ public sealed class SatelliteManager : IDisposable
         foreach (var (sat, edge) in _dockedSatellites)
         {
             states.Add(new AttachmentState(
-                sat.SatelliteId ?? throw new InvalidOperationException("Satellite must have SatelliteId to save state."),
+                sat.SatelliteId!,
                 null, edge, 0, sat.Width, sat.Height, IsDocked: true));
         }
 
@@ -210,6 +340,8 @@ public sealed class SatelliteManager : IDisposable
     }
 
     /// <summary>Restore attachment tree from saved state. Creates windows via factory.</summary>
+    /// <exception cref="InvalidOperationException">Thrown if the state graph contains
+    /// a cycle, or a parent reference that no entry satisfies.</exception>
     public void RestoreState(AttachmentState[] state, Func<string, SatelliteWindow> windowFactory)
     {
         DetachAll();
@@ -225,8 +357,19 @@ public sealed class SatelliteManager : IDisposable
 
         var attached = new HashSet<string>();
         bool progress = true;
+
+        // Cycle / unsatisfiable-parent guard: no valid tree needs more passes than
+        // there are nodes (each pass attaches at least one new node). If we exit
+        // the loop with un-attached entries, the input has a cycle or a dangling
+        // parent reference.
+        int maxIters = state.Length + 1;
+        int iters = 0;
+
         while (progress)
         {
+            if (++iters > maxIters)
+                throw new InvalidOperationException("RestoreState iteration limit exceeded — state graph likely contains a cycle.");
+
             progress = false;
             foreach (var s in state)
             {
@@ -241,6 +384,15 @@ public sealed class SatelliteManager : IDisposable
                 attached.Add(s.Id);
                 progress = true;
             }
+        }
+
+        if (attached.Count != state.Length)
+        {
+            var orphans = state.Where(s => !attached.Contains(s.Id))
+                .Select(s => $"'{s.Id}' (parent='{s.ParentId}')");
+            throw new InvalidOperationException(
+                "RestoreState could not attach all entries — unsatisfiable parent references: " +
+                string.Join(", ", orphans));
         }
     }
 
@@ -271,6 +423,13 @@ public sealed class SatelliteManager : IDisposable
         attachment.AttachedAt = DateTime.UtcNow;
         satellite.Attachment = attachment;
         satellite.Manager = this;
+        // Preserve DockHost role for Dock-framework-owned windows. Flipping to
+        // Satellite would swap StyleKeyOverride from typeof(HostWindow) to
+        // typeof(Window), losing HostWindow's ControlTheme — and with it the
+        // chrome grips that initiate drag-back-to-dock. For non-DockHost
+        // windows (e.g. manually popped-out via menu), Satellite is correct.
+        if (satellite.Role != WindowRole.DockHost)
+            satellite.Role = WindowRole.Satellite;
         AddToTree(attachment);
 
         PositionSatellite(attachment);
@@ -305,7 +464,19 @@ public sealed class SatelliteManager : IDisposable
         if (_isClosingAll) return;
 
         var attachment = _allAttachments.Find(a => a.Satellite == satellite);
-        if (attachment == null) return;
+        if (attachment == null)
+        {
+            // The satellite was already auto-detached (e.g. drag detection released
+            // it from its parent's snap chain). The caller still asked us to close
+            // it, so honour that — otherwise the window is leaked on screen.
+            if (closeSatellite)
+            {
+                FlushContentForReparent(satellite);
+                try { satellite.Close(); }
+                catch (InvalidOperationException) { }
+            }
+            return;
+        }
 
         if (mode == DetachMode.ReparentChildren)
         {
@@ -326,9 +497,18 @@ public sealed class SatelliteManager : IDisposable
         _hiddenByMinimize.Remove(satellite);
         satellite.Attachment = null;
         satellite.Manager = null; // Clear before Close to prevent reentrancy from OnClosed
+        // Preserve DockHost role for Dock-framework-owned windows so their
+        // HostWindow ControlTheme (chrome grips, drop detection, tab strip)
+        // survives the detach. Otherwise the role flip to Floating swaps the
+        // theme to plain Window — losing Dock's drag-back-to-dock machinery
+        // mid-drag. For non-DockHost (e.g. user-popped-out satellites that
+        // were dragged away from snap), Floating is the correct rest state.
+        if (satellite.Role != WindowRole.DockHost)
+            satellite.Role = WindowRole.Floating;
 
         if (closeSatellite)
         {
+            FlushContentForReparent(satellite);
             try { satellite.Close(); }
             catch (InvalidOperationException) { }
         }
@@ -337,6 +517,43 @@ public sealed class SatelliteManager : IDisposable
             RepositionSubtree(attachment.Parent);
 
         AttachmentChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Release the satellite's <see cref="Window.Content"/> and force a synchronous
+    /// layout pass so its <c>LayoutManager</c> drops any dirty entries for that
+    /// content. Call this on a satellite whose content you intend to re-parent into
+    /// another window <em>before</em> closing the satellite. Without this, the next
+    /// render tick after re-parent raises
+    /// <c>"Attempt to call InvalidateArrange on wrong LayoutManager"</c>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Detach(SatelliteWindow, bool)"/>, <see cref="DetachFloating"/>,
+    /// <see cref="DetachAll"/>, and the internal close paths all invoke this
+    /// automatically when <c>closeSatellite</c> is <c>true</c>. You only need to
+    /// call it directly when you want to re-parent the content into a new visual
+    /// parent <em>before</em> closing the satellite. See also the instance helper
+    /// <see cref="SatelliteWindow.PrepareContentForReparent"/> which forwards here.
+    /// </remarks>
+    public static void FlushContentForReparent(SatelliteWindow satellite)
+    {
+        ArgumentNullException.ThrowIfNull(satellite);
+        try
+        {
+            if (satellite.Content is null) return;
+            satellite.Content = null;
+            satellite.UpdateLayout();
+        }
+        catch
+        {
+            // Best-effort: this runs on the close path and must NOT throw, since
+            // a failure here would prevent the satellite from being torn down.
+            // Either:
+            //   - Content was already null (handled above, won't reach here), or
+            //   - the satellite is mid-disposal and UpdateLayout throws (the
+            //     close that follows will still proceed; the visual tree will
+            //     be torn down by Window.Close in any case).
+        }
     }
 
     private void CloseSubtree(SatelliteWindow root)
@@ -348,6 +565,8 @@ public sealed class SatelliteManager : IDisposable
             RemoveFromTree(child);
             child.Satellite.Attachment = null;
             child.Satellite.Manager = null;
+            child.Satellite.Role = WindowRole.Floating;
+            FlushContentForReparent(child.Satellite);
             try { child.Satellite.Close(); }
             catch (InvalidOperationException) { }
         }
@@ -387,7 +606,14 @@ public sealed class SatelliteManager : IDisposable
             if (att == null) break;
             current = att.Parent;
             depth++;
-            if (depth > 100) break;
+            // Hard cap — the snap tree should never reach this depth. If it
+            // does, it indicates a corrupt _allAttachments graph (e.g. a cycle
+            // the AttachCore descendant-check failed to prevent). Throwing
+            // beats silently returning a wrong depth that would then trick
+            // ChainDepthLimit into accepting / rejecting the wrong attachments.
+            if (depth > 100)
+                throw new InvalidOperationException(
+                    "Snap-tree depth exceeded 100 — internal graph likely corrupt (cycle?).");
         }
         return depth;
     }
@@ -443,6 +669,10 @@ public sealed class SatelliteManager : IDisposable
             RepositionAll();
         else if (e.Property == Window.WindowStateProperty && e.NewValue is WindowState state)
             OnMainWindowStateChanged(state);
+        // Note: RenderScaling is a CLR property on Visual, not an AvaloniaProperty,
+        // so it can't be observed via property-changed events. To track DPI
+        // changes (e.g. moving between monitors with different scaling), subscribe
+        // to TopLevel.ScalingChanged on the main window during attach instead.
     }
 
     private void OnMainWindowStateChanged(WindowState state)
@@ -457,6 +687,14 @@ public sealed class SatelliteManager : IDisposable
                 {
                     _hiddenByMinimize.Add(att.Satellite);
                     att.Satellite.Hide();
+                }
+            }
+            foreach (var sat in _floatingTracked.Keys.ToArray())
+            {
+                if (sat.IsVisible)
+                {
+                    _hiddenByMinimize.Add(sat);
+                    sat.Hide();
                 }
             }
         }
@@ -482,7 +720,7 @@ public sealed class SatelliteManager : IDisposable
 
     private void SubscribeDragDetection(SatelliteWindow satellite)
     {
-        if (!_behavior.AutoDetachOnDrag) return;
+        if (!_behavior.Enabled || !_behavior.AutoDetachOnDrag) return;
         UnsubscribeFromSatellite(satellite);
         EventHandler<PixelPointEventArgs> handler = (_, _) => OnSatelliteUserMoved(satellite);
         satellite.PositionChanged += handler;
@@ -558,6 +796,7 @@ public sealed class SatelliteManager : IDisposable
 
     private void StartReSnapMonitoring(SatelliteWindow satellite)
     {
+        if (!_behavior.Enabled) return;
         StopReSnapMonitoring(satellite); // Ensure clean state
         _detachedAt[satellite] = DateTime.UtcNow;
         EventHandler<PixelPointEventArgs> posHandler = (_, _) => OnDetachedSatelliteMoved(satellite);
@@ -598,6 +837,20 @@ public sealed class SatelliteManager : IDisposable
         double offset = (snap.Value.edge is SnapEdge.Left or SnapEdge.Right)
             ? (satellite.Position.Y - parentPos.Y) / scaling
             : (satellite.Position.X - parentPos.X) / scaling;
+
+        // If this window was being tracked as floating (e.g. a Dock drag-out
+        // promoted via AttachFloating), release that tracking first. Attach()
+        // throws "already attached" if satellite.Manager is non-null, and
+        // AttachFloating set it on us; we must clear before promoting to
+        // snapped-satellite mode. StopReSnapMonitoring is also called here so
+        // we don't double-fire while Attach re-establishes its own handlers.
+        if (_floatingTracked.TryGetValue(satellite, out var onClosedFloating))
+        {
+            satellite.Closed -= onClosedFloating;
+            _floatingTracked.Remove(satellite);
+            satellite.Manager = null;
+        }
+        StopReSnapMonitoring(satellite);
 
         if (parent == _mainWindow)
             Attach(satellite, snap.Value.edge, offset);

@@ -1,0 +1,32 @@
+<Project>
+  <!-- Vendored Dock.Avalonia 12.0.0.2 source. Self-contained MSBuild scope —
+       does NOT inherit any Directory.Build.props from parent folders so the
+       vendored projects build with the same settings the upstream uses.
+       See README.md and LICENSE-Dock.TXT in this folder. -->
+  <PropertyGroup>
+    <VersionPrefix>12.0.0.2</VersionPrefix>
+    <VersionSuffix>vendored</VersionSuffix>
+    <Authors>Wiesław Šoltés (vendored by MuxiMuxi)</Authors>
+    <Company>Wiesław Šoltés</Company>
+    <Description>Dock.Avalonia, vendored into SatelliteWindows.Avalonia.</Description>
+    <Copyright>Copyright © Wiesław Šoltés 2026 (MIT)</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+  <PropertyGroup>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <LangVersion>13</LangVersion>
+    <SuppressTfmSupportBuildWarnings>true</SuppressTfmSupportBuildWarnings>
+    <Nullable>enable</Nullable>
+    <!-- Vendored copy is internal to MuxiMuxi — never published as NuGet.
+         Skip packaging to avoid the upstream README/Icon requirement that
+         would force us to copy more files. -->
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Strong-name signing is only useful for public NuGet distribution.
+         Disable it here so we don't need to manage the upstream snk key. -->
+    <SignAssembly>false</SignAssembly>
+  </PropertyGroup>
+  <PropertyGroup>
+    <DockEnableGeneratedAppInitializeComponent>false</DockEnableGeneratedAppInitializeComponent>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net6.0;net8.0;net10.0</TargetFrameworks>
+    <OutputType>Library</OutputType>
+    <DocumentationFile>bin\$(Configuration)\$(TargetFramework)\$(AssemblyName).xml</DocumentationFile>
+    <AssemblyName>SatelliteWindows.Dock.Serializer.SystemTextJson</AssemblyName>
+    <RootNamespace>SatelliteWindows.Dock.Serializer.SystemTextJson</RootNamespace>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>SatelliteWindows.Dock.Serializer.SystemTextJson</PackageId>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);AddDockSourceGeneratorAnalyzerToPackage</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <Import Project="..\..\build\SignAssembly.props" />
+  <Import Project="..\..\build\SourceLink.props" />
+  <Import Project="..\..\build\System.Text.Json.props" />
+  <Import Project="..\..\build\ReferenceAssemblies.props" />
+
+  <ItemGroup>
+    <ProjectReference Include="..\SatelliteWindows.Dock.Model\SatelliteWindows.Dock.Model.csproj" />
+    <ProjectReference Include="..\SatelliteWindows.Dock.Serializer.SystemTextJson.Generators\SatelliteWindows.Dock.Serializer.SystemTextJson.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all"
+                      GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained;PublishAot;PublishTrimmed;TrimMode;InvariantGlobalization;StripSymbols"
+                      SetTargetFramework="TargetFramework=netstandard2.0" />
+  </ItemGroup>
+
+  <Target Name="AddDockSourceGeneratorAnalyzerToPackage"
+          Condition="'$(TargetFramework)' == 'net6.0'">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(MSBuildProjectDirectory)\..\Dock.Serializer.SystemTextJson.Generators\bin\$(Configuration)\netstandard2.0\Dock.Serializer.SystemTextJson.Generators.dll"
+                              Condition="Exists('$(MSBuildProjectDirectory)\..\Dock.Serializer.SystemTextJson.Generators\bin\$(Configuration)\netstandard2.0\Dock.Serializer.SystemTextJson.Generators.dll')">
+        <PackagePath>analyzers/dotnet/cs/</PackagePath>
+      </TfmSpecificPackageFile>
+    </ItemGroup>
+  </Target>
+
+</Project>
